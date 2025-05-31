@@ -118,7 +118,7 @@ jobs:
         done
         echo "Neo4j is ready"
         
-# Wait for ChromaDB (max 2 minutes) - DISABLED
+        # Wait for ChromaDB (max 2 minutes) - DISABLED
         # timeout=120
         # while ! curl -f http://localhost:8000/api/v2/heartbeat >/dev/null 2>&1; do
         #   echo "Waiting for ChromaDB..."
