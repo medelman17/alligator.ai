@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
 
+from api.auth import endpoints as auth_endpoints
 from api.dependencies import get_service_manager, lifespan_manager
 from api.endpoints import cases, research, search
 from api.middleware.logging import RequestLoggingMiddleware
@@ -20,8 +21,7 @@ from api.middleware.rate_limiting import RateLimitMiddleware
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -42,23 +42,12 @@ def create_app() -> FastAPI:
         lifespan=lifespan_manager,
         # Custom OpenAPI schema
         openapi_tags=[
-            {
-                "name": "search",
-                "description": "Legal document search and discovery operations"
-            },
-            {
-                "name": "cases",
-                "description": "Case management and retrieval operations"
-            },
-            {
-                "name": "research",
-                "description": "AI-powered legal research workflows"
-            },
-            {
-                "name": "health",
-                "description": "System health and monitoring endpoints"
-            }
-        ]
+            {"name": "search", "description": "Legal document search and discovery operations"},
+            {"name": "cases", "description": "Case management and retrieval operations"},
+            {"name": "research", "description": "AI-powered legal research workflows"},
+            {"name": "health", "description": "System health and monitoring endpoints"},
+            {"name": "auth", "description": "Authentication and authorization operations"},
+        ],
     )
 
     # Add middleware
@@ -87,8 +76,7 @@ def setup_middleware(app: FastAPI) -> None:
 
     # Trusted host middleware for security
     app.add_middleware(
-        TrustedHostMiddleware,
-        allowed_hosts=["localhost", "127.0.0.1", "*.alligator.ai"]
+        TrustedHostMiddleware, allowed_hosts=["localhost", "127.0.0.1", "*.alligator.ai"]
     )
 
     # Custom request logging middleware
@@ -105,14 +93,10 @@ def setup_routes(app: FastAPI) -> None:
     @app.get("/health", tags=["health"])
     async def health_check():
         """Basic health check endpoint."""
-        return {
-            "status": "healthy",
-            "timestamp": time.time(),
-            "version": "1.0.0"
-        }
+        return {"status": "healthy", "timestamp": time.time(), "version": "1.0.0"}
 
     @app.get("/api/v1/health", tags=["health"])
-    async def api_health_check(service_manager = Depends(get_service_manager)):
+    async def api_health_check(service_manager=Depends(get_service_manager)):
         """Detailed API health check with service status."""
         service_health = await service_manager.health_check()
 
@@ -127,27 +111,17 @@ def setup_routes(app: FastAPI) -> None:
             "status": overall_status,
             "timestamp": time.time(),
             "version": "1.0.0",
-            "services": service_health
+            "services": service_health,
         }
 
     # Include API routers
-    app.include_router(
-        search.router,
-        prefix="/api/v1/search",
-        tags=["search"]
-    )
+    app.include_router(search.router, prefix="/api/v1/search", tags=["search"])
 
-    app.include_router(
-        cases.router,
-        prefix="/api/v1/cases",
-        tags=["cases"]
-    )
+    app.include_router(cases.router, prefix="/api/v1/cases", tags=["cases"])
 
-    app.include_router(
-        research.router,
-        prefix="/api/v1/research",
-        tags=["research"]
-    )
+    app.include_router(research.router, prefix="/api/v1/research", tags=["research"])
+
+    app.include_router(auth_endpoints.router, prefix="/api/v1/auth", tags=["auth"])
 
 
 def setup_exception_handlers(app: FastAPI) -> None:
@@ -162,8 +136,8 @@ def setup_exception_handlers(app: FastAPI) -> None:
             content={
                 "error": "Internal server error",
                 "message": "An unexpected error occurred",
-                "type": "InternalServerError"
-            }
+                "type": "InternalServerError",
+            },
         )
 
     @app.exception_handler(ValueError)
@@ -172,11 +146,7 @@ def setup_exception_handlers(app: FastAPI) -> None:
         logger.warning(f"Validation error: {exc}")
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
-            content={
-                "error": "Validation error",
-                "message": str(exc),
-                "type": "ValidationError"
-            }
+            content={"error": "Validation error", "message": str(exc), "type": "ValidationError"},
         )
 
 
@@ -186,10 +156,5 @@ app = create_app()
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(
-        "api.main:app",
-        host="0.0.0.0",
-        port=8001,
-        reload=True,
-        log_level="info"
-    )
+
+    uvicorn.run("api.main:app", host="0.0.0.0", port=8001, reload=True, log_level="info")

@@ -32,6 +32,13 @@ alligator.ai combines cutting-edge AI technology with deep legal expertise to de
 - Semantic memory for evolving legal knowledge
 - Personalization for attorney and firm preferences
 
+### 🔐 Enterprise Authentication
+- JWT-based authentication with refresh tokens
+- Role-based access control (RBAC) with hierarchical permissions
+- API key management for programmatic access
+- Subscription tier-based rate limiting
+- Comprehensive audit logging and security monitoring
+
 ### 🔌 MCP Integration
 - Use alligator.ai directly in Claude Desktop
 - VS Code extension support
@@ -50,7 +57,7 @@ alligator.ai combines cutting-edge AI technology with deep legal expertise to de
 ┌─────────────────────────────────────────────────┐
 │              API Gateway (FastAPI)               │
 ├─────────────────────────────────────────────────┤
-│  Auth  │  Rate Limiting  │  Request Routing     │
+│  🔐 JWT Auth  │  📊 Rate Limiting  │  🛣️ Routing   │
 └─────────────────────────────────────────────────┘
            │
            ▼
@@ -145,9 +152,10 @@ poetry run uvicorn api.main:app --reload --host 127.0.0.1 --port 8001
 
 The API will be available at:
 - **Main API**: http://localhost:8001
-- **API Documentation**: http://localhost:8001/docs (Swagger UI)
-- **Alternative Docs**: http://localhost:8001/redoc (ReDoc) 
+- **API Documentation**: http://localhost:8001/api/docs (Swagger UI)
+- **Alternative Docs**: http://localhost:8001/api/redoc (ReDoc) 
 - **Health Check**: http://localhost:8001/health
+- **Detailed Health**: http://localhost:8001/api/v1/health
 
 8. Test the API endpoints:
 ```bash
@@ -162,6 +170,7 @@ citation_graph/
 ├── api/                  # ✅ FastAPI Gateway (IMPLEMENTED)
 │   ├── main.py           # FastAPI app with lifecycle management
 │   ├── dependencies.py   # Dependency injection system
+│   ├── auth/             # ✅ Authentication system (JWT, RBAC, API keys)
 │   ├── endpoints/        # REST API endpoints
 │   └── middleware/       # CORS, logging, rate limiting
 ├── services/             # Microservices 

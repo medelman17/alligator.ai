@@ -21,9 +21,11 @@ from shared.models.legal_entities import (
 
 router = APIRouter()
 
+
 # Request/Response Models
 class CaseCreateRequest(BaseModel):
     """Request model for creating a new case."""
+
     case_name: str = Field(..., min_length=1, max_length=500)
     citation: str = Field(..., min_length=1, max_length=100)
     court_id: str = Field(..., description="ID of the court")
@@ -41,6 +43,7 @@ class CaseCreateRequest(BaseModel):
 
 class CaseUpdateRequest(BaseModel):
     """Request model for updating a case."""
+
     case_name: Optional[str] = Field(None, min_length=1, max_length=500)
     case_status: Optional[CaseStatus] = None
     summary: Optional[str] = Field(None, max_length=2000)
@@ -51,6 +54,7 @@ class CaseUpdateRequest(BaseModel):
 
 class CitationCreateRequest(BaseModel):
     """Request model for creating a citation relationship."""
+
     citing_case_id: str = Field(..., description="ID of the case that cites")
     cited_case_id: str = Field(..., description="ID of the case being cited")
     citation_text: str = Field(..., min_length=1, max_length=200)
@@ -61,6 +65,7 @@ class CitationCreateRequest(BaseModel):
 
 class CaseResponse(BaseModel):
     """Enhanced case response with additional computed fields."""
+
     case: Case
     authority_score: Optional[float] = None
     citation_count: Optional[int] = None
@@ -70,6 +75,7 @@ class CaseResponse(BaseModel):
 
 class CaseListResponse(BaseModel):
     """Response model for case list operations."""
+
     cases: list[CaseResponse]
     total_count: int
     page: int
@@ -85,7 +91,7 @@ class CaseListResponse(BaseModel):
 async def get_case(
     case_id: str = Path(..., description="Case ID"),
     include_stats: bool = Query(True, description="Include citation statistics"),
-    neo4j = Depends(get_neo4j_service)
+    neo4j=Depends(get_neo4j_service),
 ):
     """
     Get a specific case by ID with optional statistics.
@@ -98,8 +104,7 @@ async def get_case(
         case = await neo4j.get_case_by_id(case_id)
         if not case:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Case {case_id} not found"
+                status_code=status.HTTP_404_NOT_FOUND, detail=f"Case {case_id} not found"
             )
 
         response = CaseResponse(case=case)
@@ -123,7 +128,7 @@ async def get_case(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve case: {e!s}"
+            detail=f"Failed to retrieve case: {e!s}",
         )
 
 
@@ -137,7 +142,7 @@ async def list_cases(
     case_status: Optional[CaseStatus] = Query(None, description="Filter by case status"),
     date_from: Optional[date] = Query(None, description="Filter cases from this date"),
     date_to: Optional[date] = Query(None, description="Filter cases to this date"),
-    neo4j = Depends(get_neo4j_service)
+    neo4j=Depends(get_neo4j_service),
 ):
     """
     List cases with pagination and filtering options.
@@ -160,7 +165,7 @@ async def list_cases(
             date_from=date_from,
             date_to=date_to,
             limit=page_size + 1,  # Get one extra to check if there are more
-            offset=offset
+            offset=offset,
         )
 
         # Check if there are more pages
@@ -172,10 +177,7 @@ async def list_cases(
         response_cases = []
         for case in cases:
             authority_score = await neo4j.calculate_authority_score(case.id)
-            response_cases.append(CaseResponse(
-                case=case,
-                authority_score=authority_score
-            ))
+            response_cases.append(CaseResponse(case=case, authority_score=authority_score))
 
         # Get total count (this is expensive, could be optimized)
         # TODO: Implement count-only query for better performance
@@ -186,7 +188,7 @@ async def list_cases(
             case_status=case_status,
             date_from=date_from,
             date_to=date_to,
-            limit=10000  # Large limit to get count
+            limit=10000,  # Large limit to get count
         )
         total_count = len(all_cases)
 
@@ -195,21 +197,18 @@ async def list_cases(
             total_count=total_count,
             page=page,
             page_size=page_size,
-            has_next=has_next
+            has_next=has_next,
         )
 
     except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to list cases: {e!s}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to list cases: {e!s}"
         )
 
 
 @router.post("/", response_model=CaseResponse, status_code=status.HTTP_201_CREATED)
 async def create_case(
-    request: CaseCreateRequest,
-    neo4j = Depends(get_neo4j_service),
-    chroma = Depends(get_chroma_service)
+    request: CaseCreateRequest, neo4j=Depends(get_neo4j_service), chroma=Depends(get_chroma_service)
 ):
     """
     Create a new case.
@@ -230,7 +229,7 @@ async def create_case(
             docket_number=request.docket_number,
             summary=request.summary,
             holding=request.holding,
-            metadata=request.metadata or {}
+            metadata=request.metadata or {},
         )
 
         # Create case in Neo4j
@@ -242,15 +241,17 @@ async def create_case(
             await chroma.add_documents(
                 collection_name="cases",
                 documents=[request.case_text],
-                metadatas=[{
-                    "case_id": case_id,
-                    "case_name": request.case_name,
-                    "citation": request.citation,
-                    "jurisdiction": request.jurisdiction,
-                    "decision_date": request.decision_date.isoformat(),
-                    "practice_areas": [pa.value for pa in request.practice_areas]
-                }],
-                ids=[case_id]
+                metadatas=[
+                    {
+                        "case_id": case_id,
+                        "case_name": request.case_name,
+                        "citation": request.citation,
+                        "jurisdiction": request.jurisdiction,
+                        "decision_date": request.decision_date.isoformat(),
+                        "practice_areas": [pa.value for pa in request.practice_areas],
+                    }
+                ],
+                ids=[case_id],
             )
 
         # Calculate initial authority score
@@ -261,13 +262,13 @@ async def create_case(
             authority_score=authority_score,
             citation_count=0,
             citing_count=0,
-            related_cases_count=0
+            related_cases_count=0,
         )
 
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create case: {e!s}"
+            detail=f"Failed to create case: {e!s}",
         )
 
 
@@ -275,7 +276,7 @@ async def create_case(
 async def update_case(
     case_id: str = Path(..., description="Case ID"),
     request: CaseUpdateRequest = ...,
-    neo4j = Depends(get_neo4j_service)
+    neo4j=Depends(get_neo4j_service),
 ):
     """
     Update an existing case.
@@ -287,8 +288,7 @@ async def update_case(
         existing_case = await neo4j.get_case_by_id(case_id)
         if not existing_case:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Case {case_id} not found"
+                status_code=status.HTTP_404_NOT_FOUND, detail=f"Case {case_id} not found"
             )
 
         # Build update data
@@ -313,25 +313,22 @@ async def update_case(
         updated_case = await neo4j.get_case_by_id(case_id)
         authority_score = await neo4j.calculate_authority_score(case_id)
 
-        return CaseResponse(
-            case=updated_case,
-            authority_score=authority_score
-        )
+        return CaseResponse(case=updated_case, authority_score=authority_score)
 
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to update case: {e!s}"
+            detail=f"Failed to update case: {e!s}",
         )
 
 
 @router.delete("/{case_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_case(
     case_id: str = Path(..., description="Case ID"),
-    neo4j = Depends(get_neo4j_service),
-    chroma = Depends(get_chroma_service)
+    neo4j=Depends(get_neo4j_service),
+    chroma=Depends(get_chroma_service),
 ):
     """
     Delete a case.
@@ -343,8 +340,7 @@ async def delete_case(
         existing_case = await neo4j.get_case_by_id(case_id)
         if not existing_case:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Case {case_id} not found"
+                status_code=status.HTTP_404_NOT_FOUND, detail=f"Case {case_id} not found"
             )
 
         # Delete from Neo4j (this should also delete related citations)
@@ -362,7 +358,7 @@ async def delete_case(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to delete case: {e!s}"
+            detail=f"Failed to delete case: {e!s}",
         )
 
 
@@ -370,9 +366,11 @@ async def delete_case(
 @router.get("/{case_id}/citations", response_model=list[Citation])
 async def get_case_citations(
     case_id: str = Path(..., description="Case ID"),
-    direction: str = Query("both", pattern="^(citing|cited|both)$", description="Citation direction"),
+    direction: str = Query(
+        "both", pattern="^(citing|cited|both)$", description="Citation direction"
+    ),
     limit: int = Query(50, ge=1, le=500, description="Maximum citations to return"),
-    neo4j = Depends(get_neo4j_service)
+    neo4j=Depends(get_neo4j_service),
 ):
     """
     Get citations for a specific case.
@@ -395,7 +393,7 @@ async def get_case_citations(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get citations: {e!s}"
+            detail=f"Failed to get citations: {e!s}",
         )
 
 
@@ -403,7 +401,7 @@ async def get_case_citations(
 async def create_citation(
     case_id: str = Path(..., description="Citing case ID"),
     request: CitationCreateRequest = ...,
-    neo4j = Depends(get_neo4j_service)
+    neo4j=Depends(get_neo4j_service),
 ):
     """
     Create a citation relationship between two cases.
@@ -418,13 +416,13 @@ async def create_citation(
         if not citing_case:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Citing case {request.citing_case_id} not found"
+                detail=f"Citing case {request.citing_case_id} not found",
             )
 
         if not cited_case:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Cited case {request.cited_case_id} not found"
+                detail=f"Cited case {request.cited_case_id} not found",
             )
 
         # Create citation object
@@ -434,7 +432,7 @@ async def create_citation(
             citation_text=request.citation_text,
             page_number=request.page_number,
             context=request.context,
-            metadata=request.metadata or {}
+            metadata=request.metadata or {},
         )
 
         # Create citation in Neo4j
@@ -448,5 +446,5 @@ async def create_citation(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create citation: {e!s}"
+            detail=f"Failed to create citation: {e!s}",
         )

@@ -60,7 +60,8 @@
       "Bash(poetry add:*)",
       "Bash(yamllint:*)",
       "Bash(pkill:*)",
-      "Bash(timeout:*)"
+      "Bash(timeout:*)",
+      "Bash(rg:*)"
     ],
     "deny": []
   },

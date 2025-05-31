@@ -16,6 +16,7 @@ from shared.models.legal_entities import PracticeArea
 
 router = APIRouter()
 
+
 # Enums
 class ResearchStatus(str, Enum):
     PENDING = "pending"
@@ -34,17 +35,23 @@ class AnalysisType(str, Enum):
 # Request/Response Models
 class ResearchRequest(BaseModel):
     """Request model for conducting legal research."""
+
     query: str = Field(..., min_length=1, max_length=2000, description="Research question or topic")
     jurisdiction: Optional[str] = Field(None, description="Target jurisdiction")
-    practice_areas: Optional[list[PracticeArea]] = Field(None, description="Relevant practice areas")
+    practice_areas: Optional[list[PracticeArea]] = Field(
+        None, description="Relevant practice areas"
+    )
     case_ids: Optional[list[str]] = Field(None, description="Specific cases to analyze")
-    analysis_types: list[AnalysisType] = Field(default=[AnalysisType.PRECEDENT_ANALYSIS], description="Types of analysis to perform")
+    analysis_types: list[AnalysisType] = Field(
+        default=[AnalysisType.PRECEDENT_ANALYSIS], description="Types of analysis to perform"
+    )
     max_cases: int = Field(20, ge=1, le=100, description="Maximum cases to analyze")
     include_memo: bool = Field(True, description="Generate research memo")
 
 
 class ResearchSession(BaseModel):
     """Research session model."""
+
     id: str
     query: str
     status: ResearchStatus
@@ -61,6 +68,7 @@ class ResearchSession(BaseModel):
 
 class PrecedentAnalysisRequest(BaseModel):
     """Request for precedent analysis."""
+
     case_id: str = Field(..., description="Case ID to analyze")
     depth: int = Field(2, ge=1, le=4, description="Analysis depth")
     include_treatments: bool = Field(True, description="Include treatment analysis")
@@ -69,6 +77,7 @@ class PrecedentAnalysisRequest(BaseModel):
 
 class PrecedentAnalysisResult(BaseModel):
     """Result of precedent analysis."""
+
     case_id: str
     analysis_summary: str
     key_precedents: list[dict[str, Any]]
@@ -82,6 +91,7 @@ class PrecedentAnalysisResult(BaseModel):
 
 class MemoGenerationRequest(BaseModel):
     """Request for memo generation."""
+
     research_session_id: str = Field(..., description="Research session ID")
     memo_type: str = Field("research_memo", description="Type of memo to generate")
     include_citations: bool = Field(True, description="Include case citations")
@@ -90,6 +100,7 @@ class MemoGenerationRequest(BaseModel):
 
 class MemoResponse(BaseModel):
     """Generated memo response."""
+
     memo_content: str
     format: str
     citations_count: int
@@ -107,6 +118,7 @@ research_sessions: dict[str, ResearchSession] = {}
 def generate_session_id() -> str:
     """Generate a unique session ID."""
     import uuid
+
     return str(uuid.uuid4())
 
 
@@ -114,9 +126,9 @@ def generate_session_id() -> str:
 async def create_research_session(
     request: ResearchRequest,
     background_tasks: BackgroundTasks,
-    neo4j = Depends(get_neo4j_service),
-    chroma = Depends(get_chroma_service),
-    analyzer = Depends(get_precedent_analyzer)
+    neo4j=Depends(get_neo4j_service),
+    chroma=Depends(get_chroma_service),
+    analyzer=Depends(get_precedent_analyzer),
 ):
     """
     Create a new research session and start background analysis.
@@ -134,19 +146,14 @@ async def create_research_session(
             jurisdiction=request.jurisdiction,
             practice_areas=request.practice_areas,
             created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow()
+            updated_at=datetime.utcnow(),
         )
 
         research_sessions[session_id] = session
 
         # Start background research task
         background_tasks.add_task(
-            conduct_research_background,
-            session_id,
-            request,
-            neo4j,
-            chroma,
-            analyzer
+            conduct_research_background, session_id, request, neo4j, chroma, analyzer
         )
 
         return session
@@ -154,16 +161,12 @@ async def create_research_session(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create research session: {e!s}"
+            detail=f"Failed to create research session: {e!s}",
         )
 
 
 async def conduct_research_background(
-    session_id: str,
-    request: ResearchRequest,
-    neo4j,
-    chroma,
-    analyzer
+    session_id: str, request: ResearchRequest, neo4j, chroma, analyzer
 ):
     """Background task to conduct legal research."""
     try:
@@ -181,7 +184,7 @@ async def conduct_research_background(
                     query=request.query,
                     collection_name="cases",
                     limit=request.max_cases,
-                    jurisdiction=request.jurisdiction
+                    jurisdiction=request.jurisdiction,
                 )
 
                 # Analyze each case
@@ -191,9 +194,7 @@ async def conduct_research_background(
                     if case_id:
                         # Run precedent analysis
                         analysis_result = await analyzer.analyze_precedent(
-                            case_id=case_id,
-                            query=request.query,
-                            jurisdiction=request.jurisdiction
+                            case_id=case_id, query=request.query, jurisdiction=request.jurisdiction
                         )
                         if analysis_result:
                             precedent_results.append(analysis_result)
@@ -201,16 +202,14 @@ async def conduct_research_background(
                 results["precedent_analysis"] = {
                     "cases_analyzed": len(precedent_results),
                     "results": precedent_results[:5],  # Top 5 results
-                    "summary": f"Analyzed {len(precedent_results)} relevant precedents"
+                    "summary": f"Analyzed {len(precedent_results)} relevant precedents",
                 }
 
         # Generate memo if requested
         memo_content = None
         if request.include_memo and results:
             memo_content = await generate_research_memo(
-                query=request.query,
-                results=results,
-                jurisdiction=request.jurisdiction
+                query=request.query, results=results, jurisdiction=request.jurisdiction
             )
 
         # Update session with results
@@ -230,9 +229,7 @@ async def conduct_research_background(
 
 
 async def generate_research_memo(
-    query: str,
-    results: dict[str, Any],
-    jurisdiction: Optional[str] = None
+    query: str, results: dict[str, Any], jurisdiction: Optional[str] = None
 ) -> str:
     """Generate a research memo from analysis results."""
     # Simple memo generation (could be enhanced with LLM)
@@ -244,19 +241,21 @@ async def generate_research_memo(
         f"**Date:** {datetime.utcnow().strftime('%Y-%m-%d')}",
         "",
         "## Executive Summary",
-        ""
+        "",
     ]
 
     # Add precedent analysis if available
     if "precedent_analysis" in results:
         precedent_data = results["precedent_analysis"]
-        memo_lines.extend([
-            "## Precedent Analysis",
-            "",
-            f"Analyzed {precedent_data['cases_analyzed']} relevant precedents.",
-            precedent_data["summary"],
-            ""
-        ])
+        memo_lines.extend(
+            [
+                "## Precedent Analysis",
+                "",
+                f"Analyzed {precedent_data['cases_analyzed']} relevant precedents.",
+                precedent_data["summary"],
+                "",
+            ]
+        )
 
         # Add top cases
         if precedent_data.get("results"):
@@ -264,19 +263,23 @@ async def generate_research_memo(
             memo_lines.append("")
             for i, result in enumerate(precedent_data["results"][:3], 1):
                 memo_lines.append(f"{i}. Case ID: {result.get('case_id', 'Unknown')}")
-                memo_lines.append(f"   Summary: {result.get('analysis_summary', 'No summary available')}")
+                memo_lines.append(
+                    f"   Summary: {result.get('analysis_summary', 'No summary available')}"
+                )
                 memo_lines.append("")
 
-    memo_lines.extend([
-        "## Recommendations",
-        "",
-        "- Review the identified precedents for applicability to your case",
-        "- Consider jurisdiction-specific factors in your analysis",
-        "- Consult with legal counsel for case-specific advice",
-        "",
-        "---",
-        "*This memo was generated by alligator.ai legal research platform.*"
-    ])
+    memo_lines.extend(
+        [
+            "## Recommendations",
+            "",
+            "- Review the identified precedents for applicability to your case",
+            "- Consider jurisdiction-specific factors in your analysis",
+            "- Consult with legal counsel for case-specific advice",
+            "",
+            "---",
+            "*This memo was generated by alligator.ai legal research platform.*",
+        ]
+    )
 
     return "\n".join(memo_lines)
 
@@ -291,18 +294,14 @@ async def get_research_session(session_id: str):
     session = research_sessions.get(session_id)
     if not session:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Research session {session_id} not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail=f"Research session {session_id} not found"
         )
 
     return session
 
 
 @router.get("/sessions", response_model=list[ResearchSession])
-async def list_research_sessions(
-    status_filter: Optional[ResearchStatus] = None,
-    limit: int = 20
-):
+async def list_research_sessions(status_filter: Optional[ResearchStatus] = None, limit: int = 20):
     """
     List research sessions with optional status filtering.
 
@@ -322,8 +321,8 @@ async def list_research_sessions(
 @router.post("/analyze-precedent", response_model=PrecedentAnalysisResult)
 async def analyze_precedent(
     request: PrecedentAnalysisRequest,
-    analyzer = Depends(get_precedent_analyzer),
-    neo4j = Depends(get_neo4j_service)
+    analyzer=Depends(get_precedent_analyzer),
+    neo4j=Depends(get_neo4j_service),
 ):
     """
     Perform detailed precedent analysis for a specific case.
@@ -335,8 +334,7 @@ async def analyze_precedent(
         case = await neo4j.get_case_by_id(request.case_id)
         if not case:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Case {request.case_id} not found"
+                status_code=status.HTTP_404_NOT_FOUND, detail=f"Case {request.case_id} not found"
             )
 
         # Perform precedent analysis
@@ -345,13 +343,13 @@ async def analyze_precedent(
             query=f"Analysis of {case.case_name}",
             jurisdiction=request.jurisdiction_filter,
             depth=request.depth,
-            include_treatments=request.include_treatments
+            include_treatments=request.include_treatments,
         )
 
         if not analysis_result:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Precedent analysis failed"
+                detail="Precedent analysis failed",
             )
 
         return PrecedentAnalysisResult(
@@ -359,11 +357,13 @@ async def analyze_precedent(
             analysis_summary=analysis_result.get("summary", "No summary available"),
             key_precedents=analysis_result.get("precedents", []),
             authority_analysis=analysis_result.get("authority_analysis", {}),
-            treatment_analysis=analysis_result.get("treatment_analysis") if request.include_treatments else None,
+            treatment_analysis=analysis_result.get("treatment_analysis")
+            if request.include_treatments
+            else None,
             confidence_score=analysis_result.get("confidence_score", 0.5),
             supporting_cases=analysis_result.get("supporting_cases", []),
             distinguishing_cases=analysis_result.get("distinguishing_cases", []),
-            recommendations=analysis_result.get("recommendations", [])
+            recommendations=analysis_result.get("recommendations", []),
         )
 
     except HTTPException:
@@ -371,7 +371,7 @@ async def analyze_precedent(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Precedent analysis failed: {e!s}"
+            detail=f"Precedent analysis failed: {e!s}",
         )
 
 
@@ -388,37 +388,37 @@ async def generate_memo(request: MemoGenerationRequest):
         if not session:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Research session {request.research_session_id} not found"
+                detail=f"Research session {request.research_session_id} not found",
             )
 
         if not session.results:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Research session has no results to generate memo from"
+                detail="Research session has no results to generate memo from",
             )
 
         # Generate memo content
         memo_content = await generate_research_memo(
-            query=session.query,
-            results=session.results,
-            jurisdiction=session.jurisdiction
+            query=session.query, results=session.results, jurisdiction=session.jurisdiction
         )
 
         # Convert format if needed
         if request.format == "html":
             # Simple markdown to HTML conversion
             import re
-            memo_content = re.sub(r'^# (.+)$', r'<h1>\1</h1>', memo_content, flags=re.MULTILINE)
-            memo_content = re.sub(r'^## (.+)$', r'<h2>\1</h2>', memo_content, flags=re.MULTILINE)
-            memo_content = re.sub(r'^### (.+)$', r'<h3>\1</h3>', memo_content, flags=re.MULTILINE)
-            memo_content = memo_content.replace('\n\n', '</p><p>').replace('\n', '<br>')
+
+            memo_content = re.sub(r"^# (.+)$", r"<h1>\1</h1>", memo_content, flags=re.MULTILINE)
+            memo_content = re.sub(r"^## (.+)$", r"<h2>\1</h2>", memo_content, flags=re.MULTILINE)
+            memo_content = re.sub(r"^### (.+)$", r"<h3>\1</h3>", memo_content, flags=re.MULTILINE)
+            memo_content = memo_content.replace("\n\n", "</p><p>").replace("\n", "<br>")
             memo_content = f"<div>{memo_content}</div>"
         elif request.format == "text":
             # Strip markdown formatting
             import re
-            memo_content = re.sub(r'^#+\s+', '', memo_content, flags=re.MULTILINE)
-            memo_content = re.sub(r'\*\*(.+?)\*\*', r'\1', memo_content)
-            memo_content = re.sub(r'\*(.+?)\*', r'\1', memo_content)
+
+            memo_content = re.sub(r"^#+\s+", "", memo_content, flags=re.MULTILINE)
+            memo_content = re.sub(r"\*\*(.+?)\*\*", r"\1", memo_content)
+            memo_content = re.sub(r"\*(.+?)\*", r"\1", memo_content)
 
         # Count citations (simple heuristic)
         citation_count = memo_content.count("Case ID:") + memo_content.count("v.")
@@ -428,7 +428,7 @@ async def generate_memo(request: MemoGenerationRequest):
             format=request.format,
             citations_count=citation_count,
             generated_at=datetime.utcnow(),
-            research_session_id=request.research_session_id
+            research_session_id=request.research_session_id,
         )
 
     except HTTPException:
@@ -436,5 +436,5 @@ async def generate_memo(request: MemoGenerationRequest):
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Memo generation failed: {e!s}"
+            detail=f"Memo generation failed: {e!s}",
         )

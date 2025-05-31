@@ -9,6 +9,8 @@ import os
 from contextlib import asynccontextmanager
 from typing import Optional
 
+from api.auth.dependencies import AuthDependencies
+from api.auth.service import AuthService
 from services.graph.neo4j_service import Neo4jService
 from services.orchestration.agents.precedent_analyzer import PrecedentAnalyzer
 from services.vector.chroma_service import ChromaService
@@ -19,6 +21,8 @@ logger = logging.getLogger(__name__)
 _neo4j_service: Optional[Neo4jService] = None
 _chroma_service: Optional[ChromaService] = None
 _precedent_analyzer: Optional[PrecedentAnalyzer] = None
+_auth_service: Optional[AuthService] = None
+_auth_dependencies: Optional[AuthDependencies] = None
 
 
 class ServiceManager:
@@ -28,6 +32,8 @@ class ServiceManager:
         self.neo4j_service: Optional[Neo4jService] = None
         self.chroma_service: Optional[ChromaService] = None
         self.precedent_analyzer: Optional[PrecedentAnalyzer] = None
+        self.auth_service: Optional[AuthService] = None
+        self.auth_dependencies: Optional[AuthDependencies] = None
         self._initialized = False
 
     async def initialize(self):
@@ -47,6 +53,9 @@ class ServiceManager:
             # Initialize AI agents
             await self._initialize_agents()
 
+            # Initialize authentication system
+            await self._initialize_auth()
+
             self._initialized = True
             logger.info("✅ All services initialized successfully")
 
@@ -62,9 +71,7 @@ class ServiceManager:
             neo4j_password = os.getenv("NEO4J_PASSWORD", "citation_graph_2024")
 
             self.neo4j_service = Neo4jService(
-                uri=neo4j_uri,
-                user=neo4j_user,
-                password=neo4j_password
+                uri=neo4j_uri, user=neo4j_user, password=neo4j_password
             )
 
             # Test connection
@@ -107,7 +114,7 @@ class ServiceManager:
             self.precedent_analyzer = PrecedentAnalyzer(
                 neo4j_service=self.neo4j_service,
                 chroma_service=self.chroma_service,
-                anthropic_api_key=anthropic_api_key
+                anthropic_api_key=anthropic_api_key,
             )
 
             logger.info("✅ AI agents initialized")
@@ -117,6 +124,58 @@ class ServiceManager:
             # Create mock agent for development
             self.precedent_analyzer = MockPrecedentAnalyzer()
             logger.info("📝 Using mock precedent analyzer")
+
+    async def _initialize_auth(self):
+        """Initialize authentication system."""
+        try:
+            # PostgreSQL connection pool for auth service
+            import asyncpg
+
+            database_url = os.getenv("DATABASE_URL")
+            if not database_url:
+                # Use default values for development
+                database_url = (
+                    "postgresql://citation_user:citation_pass_2024@localhost:5432/citation_graph"
+                )
+
+            # Create connection pool
+            db_pool = await asyncpg.create_pool(database_url, min_size=1, max_size=10)
+
+            # JWT configuration
+            jwt_secret = os.getenv("JWT_SECRET_KEY", "dev-secret-key-change-in-production")
+            jwt_algorithm = os.getenv("JWT_ALGORITHM", "HS256")
+            access_token_expire_minutes = int(os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
+
+            # Initialize auth service
+            self.auth_service = AuthService(
+                db_pool=db_pool,
+                secret_key=jwt_secret,
+                algorithm=jwt_algorithm,
+                access_token_expire_minutes=access_token_expire_minutes,
+            )
+
+            # Initialize Redis for auth dependencies (rate limiting, token blacklist)
+            import redis.asyncio as redis
+
+            redis_url = os.getenv("REDIS_URL", "redis://:citation_redis_2024@localhost:6379/0")
+            redis_client = redis.from_url(redis_url)
+
+            # Initialize auth dependencies
+            self.auth_dependencies = AuthDependencies(
+                auth_service=self.auth_service, redis_client=redis_client
+            )
+
+            # Set global auth dependencies for convenience functions
+            import api.auth.dependencies as auth_deps_module
+
+            auth_deps_module.auth_deps = self.auth_dependencies
+
+            logger.info("✅ Authentication system initialized")
+
+        except Exception as e:
+            logger.warning(f"⚠️ Authentication initialization failed: {e}")
+            # For development, we can continue without auth
+            logger.info("📝 Continuing without authentication (development mode)")
 
     async def cleanup(self):
         """Clean up service connections."""
@@ -140,7 +199,8 @@ class ServiceManager:
         health_status = {
             "neo4j": "unknown",
             "chromadb": "unknown",
-            "agents": "unknown"
+            "agents": "unknown",
+            "auth": "unknown",
         }
 
         # Check Neo4j
@@ -165,6 +225,18 @@ class ServiceManager:
                 health_status["agents"] = "healthy"
         except Exception:
             health_status["agents"] = "unhealthy"
+
+        # Check authentication system
+        try:
+            if self.auth_service and self.auth_dependencies:
+                # Test database connection
+                async with self.auth_service.db_pool.acquire() as conn:
+                    await conn.fetchval("SELECT 1")
+                # Test Redis connection
+                await self.auth_dependencies.redis_client.ping()
+                health_status["auth"] = "healthy"
+        except Exception:
+            health_status["auth"] = "unhealthy"
 
         return health_status
 
@@ -226,10 +298,14 @@ class MockChromaService:
     async def get_collection_info(self, collection_name: str):
         return {"name": collection_name, "count": 0}
 
-    async def semantic_search(self, query: str, collection_name: str = "cases", limit: int = 10, **filters):
+    async def semantic_search(
+        self, query: str, collection_name: str = "cases", limit: int = 10, **filters
+    ):
         return []
 
-    async def add_documents(self, collection_name: str, documents: list, metadatas: list, ids: list):
+    async def add_documents(
+        self, collection_name: str, documents: list, metadatas: list, ids: list
+    ):
         pass
 
     async def delete_documents(self, collection_name: str, ids: list):
@@ -251,7 +327,7 @@ class MockPrecedentAnalyzer:
             "confidence_score": 0.5,
             "supporting_cases": [],
             "distinguishing_cases": [],
-            "recommendations": ["Mock recommendation"]
+            "recommendations": ["Mock recommendation"],
         }
 
 
@@ -275,6 +351,20 @@ async def get_precedent_analyzer() -> PrecedentAnalyzer:
     if not service_manager._initialized:
         await service_manager.initialize()
     return service_manager.precedent_analyzer
+
+
+async def get_auth_service() -> AuthService:
+    """Get authentication service instance."""
+    if not service_manager._initialized:
+        await service_manager.initialize()
+    return service_manager.auth_service
+
+
+async def get_auth_dependencies() -> AuthDependencies:
+    """Get authentication dependencies instance."""
+    if not service_manager._initialized:
+        await service_manager.initialize()
+    return service_manager.auth_dependencies
 
 
 async def get_service_manager() -> ServiceManager:

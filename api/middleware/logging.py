@@ -44,10 +44,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             duration = time.time() - start_time
 
             # Log response
-            logger.info(
-                f"[{request_id}] {response.status_code} - "
-                f"Duration: {duration:.3f}s"
-            )
+            logger.info(f"[{request_id}] {response.status_code} - " f"Duration: {duration:.3f}s")
 
             # Add request ID to response headers
             response.headers["X-Request-ID"] = request_id
@@ -57,8 +54,5 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         except Exception as e:
             # Log error
             duration = time.time() - start_time
-            logger.error(
-                f"[{request_id}] ERROR - {e!s} - "
-                f"Duration: {duration:.3f}s"
-            )
+            logger.error(f"[{request_id}] ERROR - {e!s} - " f"Duration: {duration:.3f}s")
             raise

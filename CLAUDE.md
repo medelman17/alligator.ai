@@ -158,6 +158,14 @@ See `MCP_SERVER_DESIGN.md` and `MCP_IMPLEMENTATION.md` for implementation detail
    - Request routing to microservices with proper error handling
    - Mock services for development/testing environments
 
+7. **Authentication Service** (`/api/auth/`) ✅ IMPLEMENTED
+   - JWT-based authentication with access and refresh tokens
+   - Role-based access control (RBAC) with hierarchical permissions
+   - API key management for programmatic access
+   - Subscription tier-based rate limiting with Redis backing
+   - Comprehensive audit logging and security monitoring
+   - PostgreSQL-backed user and firm management
+
 ### Key Design Patterns
 
 1. **Agent Orchestration**: Uses LangGraph for complex multi-agent workflows where agents have specialized roles (precedent analysis, opposition research, memo generation)
@@ -282,6 +290,7 @@ python scripts/run_tests.py --lint          # Ruff linting + mypy type checking
 ### Current Status ✅
 - **Development Environment**: Fully operational with all services running
 - **API Gateway**: Complete FastAPI implementation with dependency injection
+- **Authentication System**: Full JWT/RBAC implementation with rate limiting
 - **CI/CD Pipeline**: All tests and security scans passing  
 - **Documentation**: Comprehensive architecture and implementation guides available
 - **Code Quality**: Zero security issues, proper error handling implemented
@@ -294,16 +303,19 @@ python scripts/run_tests.py --lint          # Ruff linting + mypy type checking
 
 ### Service Endpoints (Local Development)
 - **API Gateway**: http://localhost:8001
-  - **API Documentation**: http://localhost:8001/docs (Swagger UI)
-  - **Alternative Docs**: http://localhost:8001/redoc (ReDoc)
+  - **API Documentation**: http://localhost:8001/api/docs (Swagger UI)
+  - **Alternative Docs**: http://localhost:8001/api/redoc (ReDoc)
   - **Health Check**: http://localhost:8001/health
+  - **Detailed Health**: http://localhost:8001/api/v1/health
+  - **Authentication**: http://localhost:8001/api/v1/auth/
 - **Neo4j**: http://localhost:7474 (Bolt: 7687)
 - **ChromaDB**: http://localhost:8000/api/v2/heartbeat  
 - **PostgreSQL**: localhost:5432 (citation_user/citation_pass_2024)
 - **Redis**: localhost:6379 (auth: citation_redis_2024)
 
 ### Next Implementation Priorities
-1. Add basic authentication middleware to API Gateway
-2. Start Phase 1 ingestion system (CourtListener MVP)
+1. Start Phase 1 ingestion system (CourtListener MVP)  
+2. Implement core service classes (Neo4jService, ChromaService)
 3. Add database schemas and sample data
-4. Implement LLM service abstraction layer
+4. Build basic research agent workflows
+5. Implement LLM service abstraction layer

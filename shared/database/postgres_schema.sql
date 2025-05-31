@@ -23,13 +23,16 @@ CREATE TABLE users (
     firm_id UUID REFERENCES firms(id) ON DELETE CASCADE,
     email VARCHAR(255) UNIQUE NOT NULL,
     full_name VARCHAR(255) NOT NULL,
-    role VARCHAR(50) DEFAULT 'attorney', -- attorney, paralegal, admin
+    password_hash VARCHAR(255) NOT NULL,
+    role VARCHAR(50) DEFAULT 'attorney', -- attorney, paralegal, admin, associate, partner, guest
     bar_number VARCHAR(100),
     practice_areas TEXT[], -- Array of practice areas
     preferences JSONB DEFAULT '{}',
-    permissions JSONB DEFAULT '{}',
+    permissions JSONB DEFAULT '{}', -- Custom permissions beyond role defaults
     last_login TIMESTAMP WITH TIME ZONE,
+    password_changed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     is_active BOOLEAN DEFAULT true,
+    email_verified BOOLEAN DEFAULT false,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -166,6 +169,58 @@ CREATE TABLE mcp_sessions (
     is_active BOOLEAN DEFAULT true
 );
 
+-- API Keys for programmatic access
+CREATE TABLE api_keys (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    firm_id UUID REFERENCES firms(id) ON DELETE CASCADE,
+    name VARCHAR(100) NOT NULL,
+    description TEXT,
+    key_hash VARCHAR(255) UNIQUE NOT NULL,
+    permissions TEXT[] NOT NULL,
+    last_used TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    is_active BOOLEAN DEFAULT true
+);
+
+-- Password reset tokens
+CREATE TABLE password_reset_tokens (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    token_hash VARCHAR(255) UNIQUE NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    used_at TIMESTAMP WITH TIME ZONE,
+    is_used BOOLEAN DEFAULT false
+);
+
+-- Email verification tokens
+CREATE TABLE email_verification_tokens (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    token_hash VARCHAR(255) UNIQUE NOT NULL,
+    email VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    used_at TIMESTAMP WITH TIME ZONE,
+    is_used BOOLEAN DEFAULT false
+);
+
+-- Audit log for security events
+CREATE TABLE security_audit_log (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    firm_id UUID REFERENCES firms(id) ON DELETE SET NULL,
+    event_type VARCHAR(100) NOT NULL, -- login, logout, token_created, password_changed, etc.
+    event_data JSONB DEFAULT '{}',
+    ip_address INET,
+    user_agent TEXT,
+    success BOOLEAN NOT NULL,
+    error_message TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- Indexes for performance
 CREATE INDEX idx_users_firm_id ON users(firm_id);
 CREATE INDEX idx_users_email ON users(email);
@@ -186,6 +241,18 @@ CREATE INDEX idx_api_usage_firm_id ON api_usage(firm_id);
 CREATE INDEX idx_api_usage_created_at ON api_usage(created_at);
 CREATE INDEX idx_mcp_sessions_user_id ON mcp_sessions(user_id);
 CREATE INDEX idx_mcp_sessions_token ON mcp_sessions(session_token);
+CREATE INDEX idx_api_keys_user_id ON api_keys(user_id);
+CREATE INDEX idx_api_keys_firm_id ON api_keys(firm_id);
+CREATE INDEX idx_api_keys_hash ON api_keys(key_hash);
+CREATE INDEX idx_api_keys_active ON api_keys(is_active);
+CREATE INDEX idx_password_reset_tokens_hash ON password_reset_tokens(token_hash);
+CREATE INDEX idx_password_reset_tokens_user_id ON password_reset_tokens(user_id);
+CREATE INDEX idx_email_verification_tokens_hash ON email_verification_tokens(token_hash);
+CREATE INDEX idx_email_verification_tokens_user_id ON email_verification_tokens(user_id);
+CREATE INDEX idx_security_audit_log_user_id ON security_audit_log(user_id);
+CREATE INDEX idx_security_audit_log_firm_id ON security_audit_log(firm_id);
+CREATE INDEX idx_security_audit_log_event_type ON security_audit_log(event_type);
+CREATE INDEX idx_security_audit_log_created_at ON security_audit_log(created_at);
 
 -- GIN indexes for JSONB columns
 CREATE INDEX idx_firms_settings ON firms USING GIN(settings);
@@ -197,6 +264,7 @@ CREATE INDEX idx_research_patterns_pattern_data ON research_patterns USING GIN(p
 CREATE INDEX idx_case_outcomes_metadata ON case_outcomes USING GIN(metadata);
 CREATE INDEX idx_research_documents_metadata ON research_documents USING GIN(metadata);
 CREATE INDEX idx_mcp_sessions_client_info ON mcp_sessions USING GIN(client_info);
+CREATE INDEX idx_security_audit_log_event_data ON security_audit_log USING GIN(event_data);
 
 -- Triggers for updated_at timestamps
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -273,10 +341,12 @@ INSERT INTO firms (name, short_name, jurisdiction, practice_areas, subscription_
 ('Legal Defense Fund', 'LDF', 'US', ARRAY['constitutional', 'civil_rights'], 'enterprise'),
 ('Corporate Counsel Group', 'CCG', 'NY', ARRAY['corporate', 'litigation'], 'basic');
 
-INSERT INTO users (firm_id, email, full_name, role, practice_areas) VALUES
-((SELECT id FROM firms WHERE short_name = 'Smith'), 'jane.smith@smithlaw.com', 'Jane Smith', 'attorney', ARRAY['civil_rights']),
-((SELECT id FROM firms WHERE short_name = 'LDF'), 'john.doe@ldf.org', 'John Doe', 'attorney', ARRAY['constitutional']),
-((SELECT id FROM firms WHERE short_name = 'CCG'), 'mary.jones@ccg.com', 'Mary Jones', 'paralegal', ARRAY['corporate']);
+-- Sample users with hashed passwords (password: "demo123!")
+INSERT INTO users (firm_id, email, full_name, password_hash, role, practice_areas, email_verified) VALUES
+((SELECT id FROM firms WHERE short_name = 'Smith'), 'jane.smith@smithlaw.com', 'Jane Smith', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj4OTRQ.QNpm', 'partner', ARRAY['civil_rights'], true),
+((SELECT id FROM firms WHERE short_name = 'LDF'), 'john.doe@ldf.org', 'John Doe', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj4OTRQ.QNpm', 'attorney', ARRAY['constitutional'], true),
+((SELECT id FROM firms WHERE short_name = 'CCG'), 'mary.jones@ccg.com', 'Mary Jones', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj4OTRQ.QNpm', 'paralegal', ARRAY['corporate'], true),
+((SELECT id FROM firms WHERE short_name = 'Smith'), 'admin@smithlaw.com', 'Admin User', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj4OTRQ.QNpm', 'admin', ARRAY['civil_rights', 'employment'], true);
 
 -- Comments for documentation
 COMMENT ON TABLE firms IS 'Law firms using the platform';
@@ -290,3 +360,7 @@ COMMENT ON TABLE case_outcomes IS 'Outcomes of tracked cases for pattern learnin
 COMMENT ON TABLE research_documents IS 'Generated memos, briefs, and research documents';
 COMMENT ON TABLE api_usage IS 'API usage tracking for billing and monitoring';
 COMMENT ON TABLE mcp_sessions IS 'MCP server sessions for external AI assistants';
+COMMENT ON TABLE api_keys IS 'API keys for programmatic access to the platform';
+COMMENT ON TABLE password_reset_tokens IS 'Secure tokens for password reset functionality';
+COMMENT ON TABLE email_verification_tokens IS 'Tokens for email address verification';
+COMMENT ON TABLE security_audit_log IS 'Audit trail for security-related events and actions';
