@@ -71,6 +71,8 @@ class CaseResponse(BaseModel):
     citation_count: Optional[int] = None
     citing_count: Optional[int] = None
     related_cases_count: Optional[int] = None
+    good_law_verification: Optional[dict[str, Any]] = None
+    treatment_analysis: Optional[dict[str, Any]] = None
 
 
 class CaseListResponse(BaseModel):
@@ -110,7 +112,7 @@ async def get_case(
         response = CaseResponse(case=case)
 
         if include_stats:
-            # Get authority score
+            # Get enhanced authority score
             response.authority_score = await neo4j.calculate_authority_score(case_id)
 
             # Get citation counts
@@ -120,6 +122,16 @@ async def get_case(
             response.citing_count = len(citing_cases)
             response.citation_count = len(cited_cases)
             response.related_cases_count = response.citing_count + response.citation_count
+
+            # Get enhanced legal analysis if available
+            try:
+                response.good_law_verification = await neo4j.verify_good_law_status(case_id)
+                response.treatment_analysis = await neo4j.analyze_citation_treatment(case_id)
+            except Exception as e:
+                # Enhanced features may not be available in basic schema
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.debug(f"Enhanced analysis unavailable for {case_id}: {e}")
 
         return response
 
@@ -173,11 +185,23 @@ async def list_cases(
         if has_next:
             cases = cases[:page_size]  # Remove the extra case
 
-        # Build response cases with basic stats
+        # Build response cases with enhanced stats
         response_cases = []
         for case in cases:
             authority_score = await neo4j.calculate_authority_score(case.id)
-            response_cases.append(CaseResponse(case=case, authority_score=authority_score))
+            case_response = CaseResponse(case=case, authority_score=authority_score)
+
+            # Add basic verification for list view (less expensive)
+            try:
+                good_law_status = await neo4j.verify_good_law_status(case.id)
+                case_response.good_law_verification = {
+                    "status": good_law_status.get("good_law_confidence", "unknown"),
+                    "confidence": good_law_status.get("good_law_confidence", "unknown")
+                }
+            except Exception:
+                pass  # Enhanced features may not be available
+
+            response_cases.append(case_response)
 
         # Get total count (this is expensive, could be optimized)
         # TODO: Implement count-only query for better performance
@@ -447,4 +471,126 @@ async def create_citation(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create citation: {e!s}",
+        )
+
+
+# Enhanced Legal Analysis Endpoints
+@router.get("/{case_id}/treatment-analysis", response_model=dict[str, Any])
+async def get_treatment_analysis(
+    case_id: str = Path(..., description="Case ID"),
+    neo4j=Depends(get_neo4j_service),
+):
+    """
+    Get comprehensive citation treatment analysis for a case.
+
+    Analyzes how the case has been treated by subsequent courts
+    with sophisticated scoring and confidence assessment.
+    """
+    try:
+        # Check if case exists
+        case = await neo4j.get_case_by_id(case_id)
+        if not case:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail=f"Case {case_id} not found"
+            )
+
+        # Get enhanced treatment analysis
+        treatment_analysis = await neo4j.analyze_citation_treatment(case_id)
+
+        return treatment_analysis
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Treatment analysis failed: {e!s}",
+        )
+
+
+@router.get("/{case_id}/good-law-status", response_model=dict[str, Any])
+async def get_good_law_status(
+    case_id: str = Path(..., description="Case ID"),
+    neo4j=Depends(get_neo4j_service),
+):
+    """
+    Verify if a case is still good law.
+
+    Provides confidence assessment based on citation analysis
+    and identifies any overruling cases.
+    """
+    try:
+        # Check if case exists
+        case = await neo4j.get_case_by_id(case_id)
+        if not case:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail=f"Case {case_id} not found"
+            )
+
+        # Get good law verification
+        verification = await neo4j.verify_good_law_status(case_id)
+
+        return verification
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Good law verification failed: {e!s}",
+        )
+
+
+@router.get("/{case_id}/authoritative-precedents", response_model=list[dict[str, Any]])
+async def get_authoritative_precedents(
+    case_id: str = Path(..., description="Case ID"),
+    target_jurisdictions: Optional[str] = Query(None, description="Comma-separated jurisdictions"),
+    practice_areas: Optional[str] = Query(None, description="Comma-separated practice areas"),
+    limit: int = Query(10, ge=1, le=50, description="Maximum precedents to return"),
+    neo4j=Depends(get_neo4j_service),
+):
+    """
+    Find authoritative precedents for a case.
+
+    Uses sophisticated multi-factor scoring to identify the most
+    relevant and authoritative precedents.
+    """
+    try:
+        # Check if case exists
+        case = await neo4j.get_case_by_id(case_id)
+        if not case:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail=f"Case {case_id} not found"
+            )
+
+        # Parse query parameters
+        jurisdictions = []
+        if target_jurisdictions:
+            jurisdictions = [j.strip() for j in target_jurisdictions.split(",")]
+        if not jurisdictions:
+            jurisdictions = [case.jurisdiction]  # Default to case's jurisdiction
+
+        areas = []
+        if practice_areas:
+            areas = [a.strip() for a in practice_areas.split(",")]
+        if not areas and case.practice_areas:
+            areas = case.practice_areas  # Default to case's practice areas
+
+        # Get authoritative precedents
+        precedents = await neo4j.find_authoritative_precedents(
+            case_id=case_id,
+            target_jurisdictions=jurisdictions,
+            practice_areas=areas,
+            primary_jurisdiction=case.jurisdiction,
+            limit=limit
+        )
+
+        return precedents
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Precedent analysis failed: {e!s}",
         )

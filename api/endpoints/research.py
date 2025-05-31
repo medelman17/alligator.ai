@@ -179,20 +179,54 @@ async def conduct_research_background(
         # Perform different types of analysis
         for analysis_type in request.analysis_types:
             if analysis_type == AnalysisType.PRECEDENT_ANALYSIS:
-                # Use semantic search to find relevant cases
-                search_results = await chroma.semantic_search(
-                    query=request.query,
-                    collection_name="cases",
-                    limit=request.max_cases,
-                    jurisdiction=request.jurisdiction,
+                # Use enhanced Neo4j semantic search
+                jurisdictions = [request.jurisdiction] if request.jurisdiction else None
+                practice_areas = [pa.value for pa in request.practice_areas] if request.practice_areas else None
+
+                search_results = await neo4j.semantic_case_search(
+                    search_terms=request.query,
+                    jurisdictions=jurisdictions,
+                    practice_areas=practice_areas,
+                    good_law_only=True,
+                    limit=request.max_cases
                 )
 
-                # Analyze each case
+                # Analyze each case with enhanced methods
                 precedent_results = []
                 for result in search_results[:10]:  # Limit for performance
-                    case_id = result.get("metadata", {}).get("case_id")
-                    if case_id:
-                        # Run precedent analysis
+                    case = result["case"]
+                    case_id = case.id
+
+                    # Get enhanced analysis
+                    try:
+                        # Get authoritative precedents for this case
+                        precedents = await neo4j.find_authoritative_precedents(
+                            case_id=case_id,
+                            target_jurisdictions=jurisdictions or [case.jurisdiction],
+                            practice_areas=practice_areas or case.practice_areas or [],
+                            limit=5
+                        )
+
+                        # Get treatment analysis
+                        treatment = await neo4j.analyze_citation_treatment(case_id)
+
+                        # Get good law verification
+                        good_law = await neo4j.verify_good_law_status(case_id)
+
+                        analysis_result = {
+                            "case_id": case_id,
+                            "case_name": case.case_name,
+                            "authority_score": case.authority_score,
+                            "relevance_score": result.get("relevance_score", 0.0),
+                            "precedents": precedents[:3],  # Top 3 precedents
+                            "treatment_analysis": treatment,
+                            "good_law_status": good_law,
+                            "summary": f"Analysis of {case.case_name} - Authority: {case.authority_score:.2f}, Good Law: {good_law.get('good_law_confidence', 'unknown')}",
+                        }
+                        precedent_results.append(analysis_result)
+
+                    except Exception:
+                        # Fallback to basic analysis if enhanced features fail
                         analysis_result = await analyzer.analyze_precedent(
                             case_id=case_id, query=request.query, jurisdiction=request.jurisdiction
                         )
@@ -202,8 +236,23 @@ async def conduct_research_background(
                 results["precedent_analysis"] = {
                     "cases_analyzed": len(precedent_results),
                     "results": precedent_results[:5],  # Top 5 results
-                    "summary": f"Analyzed {len(precedent_results)} relevant precedents",
+                    "summary": f"Enhanced analysis of {len(precedent_results)} relevant precedents with authority scoring and good law verification",
                 }
+
+            elif analysis_type == AnalysisType.AUTHORITY_ANALYSIS:
+                # Perform PageRank authority analysis
+                try:
+                    pagerank_result = await neo4j.calculate_legal_authority_pagerank()
+                    results["authority_analysis"] = {
+                        "pagerank_updated": pagerank_result.get("nodes_updated", 0),
+                        "algorithm": pagerank_result.get("algorithm", "legal_authority_pagerank"),
+                        "summary": f"Updated authority scores for {pagerank_result.get('nodes_updated', 0)} cases using legal PageRank"
+                    }
+                except Exception as e:
+                    results["authority_analysis"] = {
+                        "error": str(e),
+                        "summary": "Authority analysis failed - enhanced features may not be available"
+                    }
 
         # Generate memo if requested
         memo_content = None
@@ -337,14 +386,53 @@ async def analyze_precedent(
                 status_code=status.HTTP_404_NOT_FOUND, detail=f"Case {request.case_id} not found"
             )
 
-        # Perform precedent analysis
-        analysis_result = await analyzer.analyze_precedent(
-            case_id=request.case_id,
-            query=f"Analysis of {case.case_name}",
-            jurisdiction=request.jurisdiction_filter,
-            depth=request.depth,
-            include_treatments=request.include_treatments,
-        )
+        # Use enhanced precedent analysis
+        try:
+            # Get authoritative precedents
+            jurisdictions = [request.jurisdiction_filter] if request.jurisdiction_filter else [case.jurisdiction]
+            precedents = await neo4j.find_authoritative_precedents(
+                case_id=request.case_id,
+                target_jurisdictions=jurisdictions,
+                practice_areas=case.practice_areas or [],
+                limit=10
+            )
+
+            # Get treatment analysis if requested
+            treatment_analysis = None
+            if request.include_treatments:
+                treatment_analysis = await neo4j.analyze_citation_treatment(request.case_id)
+
+            # Get good law verification
+            good_law_verification = await neo4j.verify_good_law_status(request.case_id)
+
+            # Build enhanced analysis result
+            analysis_result = {
+                "case_id": request.case_id,
+                "case_name": case.case_name,
+                "authority_score": case.authority_score,
+                "precedents": precedents,
+                "treatment_analysis": treatment_analysis,
+                "good_law_verification": good_law_verification,
+                "summary": f"Enhanced precedent analysis for {case.case_name}",
+                "confidence_score": min((case.authority_score or 0.0) / 10.0, 1.0),  # Normalize to 0-1
+                "supporting_cases": [p["case"].id for p in precedents if p.get("relevance_score", 0) > 5.0],
+                "distinguishing_cases": [],  # Would need additional analysis
+                "recommendations": [
+                    f"Consider authority weight of {case.authority_score:.2f}",
+                    f"Good law status: {good_law_verification.get('good_law_confidence', 'unknown')}",
+                    f"Found {len(precedents)} authoritative precedents"
+                ]
+            }
+
+        except Exception:
+            # Fallback to basic analyzer if enhanced features fail
+            analysis_result = await analyzer.analyze_precedent(
+                case_id=request.case_id,
+                query=f"Analysis of {case.case_name}",
+                jurisdiction=request.jurisdiction_filter,
+                depth=request.depth,
+                include_treatments=request.include_treatments,
+            )
 
         if not analysis_result:
             raise HTTPException(

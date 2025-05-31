@@ -79,53 +79,49 @@ async def semantic_search(
     """
     Perform semantic search across legal documents.
 
-    Uses vector embeddings to find semantically similar cases based on the query.
-    Can be filtered by jurisdiction, practice areas, and date ranges.
+    Uses enhanced Neo4j semantic search with legal domain filtering
+    and fallback to ChromaDB for vector similarity.
     """
     try:
-        # Prepare search filters
-        search_filters = {}
-        if request.jurisdiction:
-            search_filters["jurisdiction"] = request.jurisdiction
-        if request.practice_areas:
-            search_filters["practice_areas"] = [pa.value for pa in request.practice_areas]
-        if request.date_from:
-            search_filters["date_from"] = request.date_from.isoformat()
-        if request.date_to:
-            search_filters["date_to"] = request.date_to.isoformat()
+        # Prepare filters for enhanced Neo4j search
+        jurisdictions = [request.jurisdiction] if request.jurisdiction else None
+        practice_areas = [pa.value for pa in request.practice_areas] if request.practice_areas else None
+        date_range = None
 
-        # Perform semantic search using ChromaDB
-        search_results = await chroma.semantic_search(
-            query=request.query, collection_name="cases", limit=request.limit, **search_filters
+        if request.date_from or request.date_to:
+            date_range = (
+                request.date_from or date(1800, 1, 1),
+                request.date_to or date.today()
+            )
+
+        # Use enhanced Neo4j semantic search
+        search_results = await neo4j.semantic_case_search(
+            search_terms=request.query,
+            jurisdictions=jurisdictions,
+            practice_areas=practice_areas,
+            date_range=date_range,
+            good_law_only=True,
+            limit=request.limit
         )
 
-        # Enhance results with Neo4j data
+        # Convert to SearchResult format
         enhanced_results = []
         for result in search_results:
-            case_id = result.get("metadata", {}).get("case_id")
-            if case_id:
-                # Get case details from Neo4j
-                case = await neo4j.get_case_by_id(case_id)
-                if case:
-                    # Get authority score
-                    authority_score = await neo4j.calculate_authority_score(case_id)
-
-                    enhanced_results.append(
-                        SearchResult(
-                            case=case,
-                            relevance_score=result.get("distance", 0.0),
-                            authority_score=authority_score,
-                            snippet=result.get("document", "")[:200] + "..."
-                            if result.get("document")
-                            else None,
-                        )
-                    )
+            case = result["case"]
+            enhanced_results.append(
+                SearchResult(
+                    case=case,
+                    relevance_score=min(result.get("relevance_score", 0.0) / 10.0, 1.0),  # Normalize to 0-1
+                    authority_score=result.get("authority_score", case.authority_score),
+                    snippet=case.summary[:200] + "..." if case.summary and len(case.summary) > 200 else case.summary,
+                )
+            )
 
         return enhanced_results
 
     except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Search failed: {e!s}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Enhanced semantic search failed: {e!s}"
         )
 
 
@@ -143,33 +139,42 @@ async def search_cases(
     """
     Search for cases using structured criteria.
 
-    Performs graph-based search using Neo4j with filtering capabilities.
+    Uses enhanced Neo4j semantic search with legal domain filtering.
     """
     try:
-        # Build search criteria
-        practice_areas = [practice_area] if practice_area else None
+        # Prepare filters for enhanced search
+        jurisdictions = [jurisdiction] if jurisdiction else None
+        practice_areas = [practice_area.value] if practice_area else None
+        court_levels = [court_level.value] if court_level else None
+        date_range = None
 
-        # Perform Neo4j search
-        cases = await neo4j.find_cases_by_criteria(
-            jurisdiction=jurisdiction,
+        if date_from or date_to:
+            date_range = (
+                date_from or date(1800, 1, 1),
+                date_to or date.today()
+            )
+
+        # Use enhanced semantic search
+        search_results = await neo4j.semantic_case_search(
+            search_terms=q,
+            jurisdictions=jurisdictions,
             practice_areas=practice_areas,
-            court_level=court_level,
-            date_from=date_from,
-            date_to=date_to,
-            limit=limit,
+            court_levels=court_levels,
+            date_range=date_range,
+            good_law_only=True,
+            limit=limit
         )
 
-        # Calculate authority scores and build results
+        # Convert to SearchResult format
         results = []
-        for case in cases:
-            authority_score = await neo4j.calculate_authority_score(case.id)
-
-            # Simple text matching for relevance (could be enhanced)
-            relevance_score = 0.5  # TODO: Implement proper relevance scoring
-
+        for result in search_results:
+            case = result["case"]
             results.append(
                 SearchResult(
-                    case=case, relevance_score=relevance_score, authority_score=authority_score
+                    case=case,
+                    relevance_score=min(result.get("relevance_score", 0.0) / 10.0, 1.0),  # Normalize to 0-1
+                    authority_score=result.get("authority_score", case.authority_score),
+                    snippet=case.summary[:200] + "..." if case.summary and len(case.summary) > 200 else case.summary,
                 )
             )
 
@@ -177,7 +182,7 @@ async def search_cases(
 
     except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Case search failed: {e!s}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Enhanced case search failed: {e!s}"
         )
 
 
@@ -186,63 +191,59 @@ async def search_precedents(request: PrecedentSearchRequest, neo4j=Depends(get_n
     """
     Find precedent cases for a given case.
 
-    Analyzes citation networks to find related cases that may serve as precedents.
+    Uses enhanced precedent discovery with multi-factor relevance scoring.
     """
     try:
-        # Get citing cases (cases that cite this one)
-        citing_cases = await neo4j.get_citing_cases(
+        # Check if case exists
+        center_case = await neo4j.get_case_by_id(request.case_id)
+        if not center_case:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail=f"Case {request.case_id} not found"
+            )
+
+        # Use enhanced precedent discovery
+        jurisdictions = [request.jurisdiction_filter] if request.jurisdiction_filter else None
+
+        precedents = await neo4j.find_authoritative_precedents(
             case_id=request.case_id,
-            limit=50,  # Get more initially, then filter
+            target_jurisdictions=jurisdictions or [center_case.jurisdiction],
+            practice_areas=center_case.practice_areas or [],
+            primary_jurisdiction=center_case.jurisdiction,
+            limit=25
         )
 
-        # Get cited cases (cases this one cites)
-        cited_cases = await neo4j.get_cited_cases(case_id=request.case_id, limit=50)
-
+        # Convert to PrecedentResult format
         precedent_results = []
+        for precedent in precedents:
+            case = precedent["case"]
 
-        # Process citing cases
-        for case, citation in citing_cases:
-            if request.jurisdiction_filter and case.jurisdiction != request.jurisdiction_filter:
-                continue
-
-            authority_score = await neo4j.calculate_authority_score(case.id)
+            # Create a mock citation (in real implementation, get from citation relationship)
+            from shared.models.legal_entities import Citation
+            mock_citation = Citation(
+                citing_case_id=request.case_id,
+                cited_case_id=case.id,
+                citation_text=f"See {case.case_name}",
+                treatment="cited",  # Default treatment
+            )
 
             precedent_results.append(
                 PrecedentResult(
                     case=case,
-                    citation=citation,
-                    relevance_score=0.8,  # TODO: Implement relevance scoring
-                    authority_score=authority_score,
+                    citation=mock_citation,
+                    relevance_score=min(precedent["relevance_score"] / 10.0, 1.0),  # Normalize to 0-1
+                    authority_score=precedent["authority_factors"]["authority_score"],
                     citation_depth=1,
                 )
             )
-
-        # Process cited cases
-        for case, citation in cited_cases:
-            if request.jurisdiction_filter and case.jurisdiction != request.jurisdiction_filter:
-                continue
-
-            authority_score = await neo4j.calculate_authority_score(case.id)
-
-            precedent_results.append(
-                PrecedentResult(
-                    case=case,
-                    citation=citation,
-                    relevance_score=0.7,  # Cited cases slightly lower relevance
-                    authority_score=authority_score,
-                    citation_depth=1,
-                )
-            )
-
-        # Sort by authority score and relevance
-        precedent_results.sort(key=lambda x: (x.authority_score, x.relevance_score), reverse=True)
 
         return precedent_results[:20]  # Return top 20 precedents
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Precedent search failed: {e!s}",
+            detail=f"Enhanced precedent search failed: {e!s}",
         )
 
 

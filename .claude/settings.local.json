@@ -62,7 +62,8 @@
       "Bash(pkill:*)",
       "Bash(timeout:*)",
       "Bash(rg:*)",
-      "mcp__tavily__tavily-search"
+      "mcp__tavily__tavily-search",
+      "Bash(true)"
     ],
     "deny": []
   },
