@@ -65,7 +65,7 @@ jobs:
         env:
           PERSIST_DIRECTORY: /chroma/data
         options: >-
-          --health-cmd "curl -f http://localhost:8000/api/v1/heartbeat || exit 1"
+          --health-cmd "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/heartbeat')\""
           --health-interval 30s
           --health-timeout 10s
           --health-retries 10
@@ -252,7 +252,7 @@ jobs:
         env:
           PERSIST_DIRECTORY: /chroma/data
         options: >-
-          --health-cmd "curl -f http://localhost:8000/api/v1/heartbeat || exit 1"
+          --health-cmd "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/heartbeat')\""
           --health-interval 30s
           --health-timeout 10s
           --health-retries 10
@@ -326,7 +326,7 @@ jobs:
         env:
           PERSIST_DIRECTORY: /chroma/data
         options: >-
-          --health-cmd "curl -f http://localhost:8000/api/v1/heartbeat || exit 1"
+          --health-cmd "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/heartbeat')\""
           --health-interval 30s
           --health-timeout 10s
           --health-retries 10
@@ -390,7 +390,9 @@ jobs:
         version: ${{ env.POETRY_VERSION }}
         
     - name: Install dependencies
-      run: poetry install --no-interaction
+      run: |
+        poetry install --no-interaction
+        poetry add --group dev bandit
       
     - name: Run Bandit security linter
       run: |
