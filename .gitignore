@@ -91,3 +91,4 @@ tmp/
 
 # MCP configuration with API keys
 .mcp.json
+coverage.xml   

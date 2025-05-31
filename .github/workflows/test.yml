@@ -176,14 +176,16 @@ jobs:
           
     - name: Upload coverage to Codecov
       if: matrix.test-type == 'unit'
-      uses: codecov/codecov-action@v3
+      uses: codecov/codecov-action@v5
       with:
-        file: ./coverage.xml
-        flags: unittests
-        name: codecov-umbrella
+        # file: ./coverage.xml
+        # flags: unittests
+        # name: codecov-umbrella
+        token: ${{ secrets.CODECOV_TOKEN }}
+        slug: medelman17/alligator.ai
         
     - name: Upload test results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: test-results-${{ matrix.test-type }}
@@ -255,7 +257,7 @@ jobs:
           -v --tb=long
           
     - name: Upload accuracy test results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: accuracy-test-results
@@ -322,7 +324,7 @@ jobs:
           -v
           
     - name: Upload performance results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: performance-results
@@ -348,7 +350,7 @@ jobs:
         safety check --json --output safety-report.json || true
         
     - name: Upload security reports
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: security-reports

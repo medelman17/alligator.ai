@@ -44,7 +44,8 @@
       "Bash(python:*)",
       "Bash(poetry run pytest:*)",
       "Bash(poetry install:*)",
-      "Bash(poetry run:*)"
+      "Bash(poetry run:*)",
+      "Bash(git rm:*)"
     ],
     "deny": []
   },
