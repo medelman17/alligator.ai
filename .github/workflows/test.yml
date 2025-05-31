@@ -60,19 +60,6 @@ jobs:
           - 7474:7474
           - 7687:7687
           
-# chromadb:
-      #   image: chromadb/chroma:latest
-      #   env:
-      #     PERSIST_DIRECTORY: /chroma/data
-      #   options: >-
-      #     --health-cmd "wget --no-verbose --tries=1 --spider http://localhost:8000/api/v2/heartbeat || exit 1"
-      #     --health-interval 30s
-      #     --health-timeout 10s
-      #     --health-retries 5
-      #     --health-start-period 40s
-      #   ports:
-      #     - 8000:8000
-          
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -249,19 +236,6 @@ jobs:
           - 7474:7474
           - 7687:7687
           
-# chromadb:
-      #   image: chromadb/chroma:latest
-      #   env:
-      #     PERSIST_DIRECTORY: /chroma/data
-      #   options: >-
-      #     --health-cmd "wget --no-verbose --tries=1 --spider http://localhost:8000/api/v2/heartbeat || exit 1"
-      #     --health-interval 30s
-      #     --health-timeout 10s
-      #     --health-retries 5
-      #     --health-start-period 40s
-      #   ports:
-      #     - 8000:8000
-          
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -323,19 +297,6 @@ jobs:
         ports:
           - 7474:7474
           - 7687:7687
-          
-# chromadb:
-      #   image: chromadb/chroma:latest
-      #   env:
-      #     PERSIST_DIRECTORY: /chroma/data
-      #   options: >-
-      #     --health-cmd "wget --no-verbose --tries=1 --spider http://localhost:8000/api/v2/heartbeat || exit 1"
-      #     --health-interval 30s
-      #     --health-timeout 10s
-      #     --health-retries 5
-      #     --health-start-period 40s
-      #   ports:
-      #     - 8000:8000
           
     steps:
     - name: Checkout code
