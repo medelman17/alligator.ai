@@ -88,3 +88,6 @@ Thumbs.db
 .claude/
 scratch/
 tmp/
+
+# MCP configuration with API keys
+.mcp.json
