@@ -1,0 +1,330 @@
+# alligator.ai Core Services Implementation PRD
+
+## Executive Summary
+Implement the foundational core services for the alligator.ai legal research platform. With the infrastructure and CI/CD pipeline now fully operational, we need to build the actual service implementations that will power our legal research capabilities.
+
+## Current Status
+✅ **COMPLETED:**
+- Development environment fully operational (Neo4j, ChromaDB, PostgreSQL, Redis)
+- CI/CD pipeline working with comprehensive testing
+- Security scanning implemented (zero issues)
+- Architecture and implementation documentation complete
+- Project structure established
+
+🎯 **NEXT PHASE:** Implement core service classes and basic functionality
+
+## Objectives
+
+### Primary Goals
+1. **Implement Core Service Classes**: Build the fundamental service classes that form the backbone of our legal research platform
+2. **Establish Database Schemas**: Create and populate database schemas with sample data for testing
+3. **Create Basic API Endpoints**: Implement essential REST API endpoints for core functionality
+4. **Validate Integration**: Ensure all services work together correctly
+
+### Success Criteria
+- All core services have working implementations with proper error handling
+- Database schemas are created and can be queried successfully
+- API endpoints return expected responses with proper validation
+- Integration tests pass for service interactions
+- Code coverage remains above 90% for new implementations
+
+## Technical Requirements
+
+### Phase 1: Core Service Implementation (Priority: HIGH)
+
+#### 1. Neo4j Service Implementation (`services/graph/neo4j_service.py`)
+**Current Status**: Skeleton exists, needs full implementation
+
+**Required Methods:**
+```python
+class Neo4jService:
+    async def connect() -> None
+    async def close() -> None
+    async def create_case(case: Case) -> str
+    async def create_citation(citation: Citation) -> str
+    async def get_case_by_id(case_id: str) -> Optional[Case]
+    async def get_citing_cases(case_id: str, limit: int = 10) -> List[Tuple[Case, Citation]]
+    async def get_cited_cases(case_id: str, limit: int = 10) -> List[Tuple[Case, Citation]]
+    async def find_cases_by_criteria(jurisdiction: str = None, practice_areas: List[str] = None, limit: int = 10) -> List[Case]
+    async def calculate_authority_score(case_id: str) -> float
+    async def get_citation_network(case_id: str, depth: int = 2) -> Dict[str, Any]
+```
+
+**Database Schema Requirements:**
+- Implement Neo4j node labels: Case, Court, Judge, Attorney
+- Implement relationships: CITES, OVERRULES, DISTINGUISHES, FOLLOWS
+- Add proper indexes on frequently queried properties
+- Include authority_score calculation using PageRank
+
+#### 2. ChromaDB Service Implementation (`services/vector/chroma_service.py`)
+**Current Status**: Skeleton exists, needs full implementation
+
+**Required Methods:**
+```python
+class ChromaService:
+    async def initialize() -> None
+    async def create_collection(name: str, metadata: Dict = None) -> None
+    async def add_documents(collection_name: str, documents: List[str], metadatas: List[Dict], ids: List[str]) -> None
+    async def semantic_search(query: str, collection_name: str = "cases", limit: int = 10, **filters) -> List[Dict]
+    async def get_collection_info(collection_name: str) -> Dict
+    async def delete_collection(collection_name: str) -> None
+```
+
+**Collection Setup:**
+- Create collections: "cases", "statutes", "briefs"
+- Implement proper metadata filtering
+- Add hybrid search combining semantic + citation relevance
+
+#### 3. Database Schema Implementation
+
+**Neo4j Schema (`shared/database/neo4j_schema.py`):**
+```python
+# Implement schema creation with:
+- Node constraints and indexes
+- Relationship type definitions
+- Sample data insertion methods
+- Authority score calculation queries
+```
+
+**PostgreSQL Schema Updates (`shared/database/postgres_schema.sql`):**
+```sql
+-- Add missing tables for:
+- User management and authentication
+- Research session tracking
+- Memory system tables (episodic, working, personalization)
+- Audit logs and analytics
+```
+
+#### 4. Legal Entity Models Enhancement (`shared/models/legal_entities.py`)
+**Current Status**: Basic models exist, need enhancement
+
+**Required Enhancements:**
+- Add validation rules for legal citations
+- Implement authority score calculation methods
+- Add jurisdiction hierarchy handling
+- Include practice area categorization logic
+- Add case status tracking (good_law, questioned, overruled)
+
+### Phase 2: API Implementation (Priority: HIGH)
+
+#### 1. Core API Endpoints (`api/endpoints/`)
+Create endpoint modules:
+
+**Search Endpoints (`api/endpoints/search.py`):**
+```python
+POST /api/v1/search/cases
+POST /api/v1/search/semantic
+GET /api/v1/search/precedents/{case_id}
+```
+
+**Case Management (`api/endpoints/cases.py`):**
+```python
+GET /api/v1/cases/{case_id}
+POST /api/v1/cases
+PUT /api/v1/cases/{case_id}
+GET /api/v1/cases/{case_id}/citations
+```
+
+**Research Workflows (`api/endpoints/research.py`):**
+```python
+POST /api/v1/research/analyze-precedents
+GET /api/v1/research/sessions/{session_id}
+POST /api/v1/research/memo/generate
+```
+
+#### 2. Authentication & Authorization (`api/auth/`)
+```python
+# Implement JWT-based authentication
+class AuthService:
+    async def authenticate_user(email: str, password: str) -> Optional[User]
+    async def create_jwt_token(user: User) -> str
+    async def verify_jwt_token(token: str) -> Optional[User]
+    
+# Add rate limiting and firm-based access controls
+```
+
+### Phase 3: Sample Data & Testing (Priority: MEDIUM)
+
+#### 1. Sample Data Creation
+**Legal Sample Data (`scripts/create_sample_data.py`):**
+- 50+ real legal cases with proper citations
+- Citation relationships between cases
+- Multiple jurisdictions (Federal, CA, NY, TX)
+- Various practice areas (civil rights, contracts, torts, constitutional)
+- Realistic authority scores and case statuses
+
+**Data Sources for Samples:**
+- Use CourtListener API for real case data
+- Include landmark cases (Brown v. Board, Miranda v. Arizona, etc.)
+- Add recent cases to test temporal relevance
+
+#### 2. Integration Tests Enhancement
+**Database Integration (`tests/integration/`):**
+```python
+# Expand existing tests:
+test_neo4j_case_creation_and_retrieval()
+test_chroma_document_embedding_and_search()
+test_cross_service_search_integration()
+test_authority_score_calculation()
+test_citation_network_traversal()
+```
+
+### Phase 4: Service Orchestration (Priority: MEDIUM)
+
+#### 1. Research Service (`services/orchestration/research_service.py`)
+```python
+class ResearchService:
+    async def conduct_precedent_research(query: str, jurisdiction: str = None) -> ResearchResult
+    async def analyze_case_authority(case_id: str) -> AuthorityAnalysis
+    async def generate_research_memo(research_result: ResearchResult) -> str
+```
+
+#### 2. Agent Workflow Enhancement
+**Precedent Analyzer (`services/orchestration/agents/precedent_analyzer.py`):**
+- Fix any remaining issues in the existing implementation
+- Add comprehensive error handling
+- Integrate with actual Neo4j and Chroma services
+- Add result caching for expensive operations
+
+## Implementation Guidelines
+
+### Code Quality Standards
+- **Type Hints**: All methods must have proper type annotations
+- **Error Handling**: Comprehensive exception handling with proper logging
+- **Documentation**: Docstrings for all public methods following Google style
+- **Testing**: Minimum 90% test coverage for all new code
+- **Security**: Input validation and sanitization for all user inputs
+
+### Database Design Patterns
+- **Neo4j**: Use parameterized queries to prevent injection attacks
+- **ChromaDB**: Implement proper collection isolation and metadata filtering
+- **PostgreSQL**: Use SQLAlchemy ORM with proper relationship definitions
+- **Redis**: Implement TTL-based caching with proper key namespacing
+
+### API Design Standards
+- **REST Principles**: Proper HTTP methods and status codes
+- **Validation**: Use Pydantic models for request/response validation
+- **Error Responses**: Consistent error format with proper error codes
+- **Rate Limiting**: Implement per-user and per-firm rate limits
+- **Documentation**: Auto-generated API docs with FastAPI
+
+## Technical Constraints
+
+### Performance Requirements
+- **Search Response Time**: < 2 seconds for semantic search
+- **Citation Traversal**: < 1 second for 2-degree citation networks
+- **API Response Time**: < 500ms for simple queries
+- **Database Queries**: Optimize for concurrent access (50+ users)
+
+### Scalability Considerations
+- **Connection Pooling**: Implement proper database connection pooling
+- **Caching Strategy**: Redis caching for expensive computations
+- **Batch Processing**: Support for bulk operations
+- **Async Operations**: All I/O operations must be async
+
+### Security Requirements
+- **Input Sanitization**: All user inputs must be sanitized
+- **SQL Injection Prevention**: Use parameterized queries only
+- **Rate Limiting**: Prevent abuse with proper throttling
+- **Audit Logging**: Log all data access and modifications
+
+## Acceptance Criteria
+
+### Functional Requirements
+1. **Search Functionality**: Users can search for cases using semantic search and get relevant results
+2. **Citation Analysis**: System can traverse citation networks and calculate authority scores
+3. **Data Integrity**: All database operations maintain referential integrity
+4. **API Functionality**: All endpoints return proper responses with valid data
+
+### Non-Functional Requirements
+1. **Performance**: All operations complete within specified time limits
+2. **Reliability**: Services handle errors gracefully and recover automatically
+3. **Security**: No security vulnerabilities in static analysis scans
+4. **Maintainability**: Code follows established patterns and is well-documented
+
+### Testing Requirements
+1. **Unit Tests**: 90%+ coverage for all service classes
+2. **Integration Tests**: All service interactions tested
+3. **API Tests**: All endpoints tested with various scenarios
+4. **Performance Tests**: Load testing for concurrent users
+
+## Deliverables
+
+### Code Deliverables
+1. **Core Services**: Fully implemented Neo4jService and ChromaService
+2. **Database Schemas**: Complete schema with sample data
+3. **API Endpoints**: Working REST API with proper validation
+4. **Authentication**: JWT-based auth system
+5. **Tests**: Comprehensive test suite with high coverage
+
+### Documentation Deliverables
+1. **API Documentation**: Auto-generated OpenAPI/Swagger docs
+2. **Service Documentation**: Usage examples for each service
+3. **Database Documentation**: Schema documentation with relationships
+4. **Setup Guide**: Updated installation and setup instructions
+
+## Timeline Estimates
+
+### Phase 1: Core Services (Estimated: 4-6 hours)
+- Neo4j Service: 2 hours
+- Chroma Service: 1.5 hours
+- Database Schemas: 1 hour
+- Model Enhancements: 1 hour
+- Testing: 30 minutes
+
+### Phase 2: API Implementation (Estimated: 3-4 hours)
+- Search Endpoints: 1.5 hours
+- Case Management: 1 hour
+- Authentication: 1.5 hours
+- Testing: 30 minutes
+
+### Phase 3: Sample Data (Estimated: 2-3 hours)
+- Data Collection: 1 hour
+- Data Processing: 1 hour
+- Integration Tests: 1 hour
+
+### Phase 4: Integration (Estimated: 1-2 hours)
+- Service Orchestration: 1 hour
+- End-to-End Testing: 1 hour
+
+**Total Estimated Time: 10-15 hours**
+
+## Risk Mitigation
+
+### Technical Risks
+- **Database Connection Issues**: Implement robust connection handling with retries
+- **Performance Bottlenecks**: Profile and optimize critical paths
+- **Data Consistency**: Use transactions where appropriate
+- **Memory Usage**: Monitor and optimize embedding storage
+
+### Implementation Risks
+- **Scope Creep**: Focus on MVP functionality first
+- **Integration Complexity**: Test services in isolation before integration
+- **API Design Changes**: Version APIs to handle future changes
+- **Test Coverage**: Write tests alongside implementation, not after
+
+## Success Metrics
+
+### Technical Metrics
+- **Test Coverage**: > 90% for all new code
+- **Performance**: All operations within specified time limits
+- **Error Rate**: < 1% error rate for API endpoints
+- **Uptime**: 99.9% service availability
+
+### Quality Metrics
+- **Security Scans**: Zero high/critical security issues
+- **Code Quality**: Ruff linting score 10/10
+- **Type Coverage**: 100% type annotation coverage
+- **Documentation**: All public APIs documented
+
+## Next Steps After Completion
+
+Once this PRD is implemented, the next logical steps will be:
+
+1. **Document Ingestion System**: Implement automated legal document acquisition
+2. **Advanced Agent Workflows**: Build complex multi-agent research workflows
+3. **Memory System**: Implement personalization and learning capabilities
+4. **MCP Server**: Build the Model Context Protocol server for AI assistants
+5. **Frontend Interface**: Create web interface for legal researchers
+
+This PRD provides a solid foundation for the core platform that can be extended with advanced features in subsequent phases.

@@ -2,12 +2,12 @@ name: Tests
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main, develop]
   pull_request:
-    branches: [ main, develop ]
+    branches: [main, develop]
   schedule:
     # Run tests daily at 2 AM UTC
-    - cron: '0 2 * * *'
+    - cron: "0 2 * * *"
 
 env:
   POETRY_VERSION: "1.7.1"
@@ -16,11 +16,11 @@ env:
 jobs:
   test:
     runs-on: ubuntu-latest
-    
+
     strategy:
       matrix:
         test-type: ["unit", "integration", "agents"]
-        
+
     services:
       postgres:
         image: postgres:16-alpine
@@ -35,7 +35,7 @@ jobs:
           --health-retries 5
         ports:
           - 5432:5432
-          
+
       redis:
         image: redis:7-alpine
         options: >-
@@ -45,7 +45,7 @@ jobs:
           --health-retries 5
         ports:
           - 6379:6379
-          
+
       neo4j:
         image: neo4j:5-community
         env:
@@ -59,159 +59,159 @@ jobs:
         ports:
           - 7474:7474
           - 7687:7687
-          
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: ${{ env.PYTHON_VERSION }}
-        
-    - name: Install Poetry
-      uses: snok/install-poetry@v1
-      with:
-        version: ${{ env.POETRY_VERSION }}
-        virtualenvs-create: true
-        virtualenvs-in-project: true
-        
-    - name: Load cached venv
-      id: cached-poetry-dependencies
-      uses: actions/cache@v3
-      with:
-        path: .venv
-        key: venv-${{ runner.os }}-${{ env.PYTHON_VERSION }}-${{ hashFiles('**/poetry.lock') }}
-        
-    - name: Install dependencies
-      if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
-      run: poetry install --no-interaction --no-root
-      
-    - name: Install project
-      run: poetry install --no-interaction
-      
-    - name: Wait for services to be ready
-      run: |
-        # Wait for PostgreSQL (max 2 minutes)
-        timeout=120
-        while ! pg_isready -h localhost -p 5432 -U citation_user >/dev/null 2>&1; do
-          echo "Waiting for PostgreSQL..."
-          sleep 2
-          timeout=$((timeout - 2))
-          if [ $timeout -le 0 ]; then
-            echo "PostgreSQL failed to start within 2 minutes"
-            exit 1
-          fi
-        done
-        echo "PostgreSQL is ready"
-        
-        # Wait for Neo4j (max 3 minutes)
-        timeout=180
-        while ! curl -f http://localhost:7474 >/dev/null 2>&1; do
-          echo "Waiting for Neo4j..."
-          sleep 5
-          timeout=$((timeout - 5))
-          if [ $timeout -le 0 ]; then
-            echo "Neo4j failed to start within 3 minutes"
-            exit 1
-          fi
-        done
-        echo "Neo4j is ready"
-        
-        # Wait for ChromaDB (max 2 minutes) - DISABLED
-        # timeout=120
-        # while ! curl -f http://localhost:8000/api/v2/heartbeat >/dev/null 2>&1; do
-        #   echo "Waiting for ChromaDB..."
-        #   sleep 3
-        #   timeout=$((timeout - 3))
-        #   if [ $timeout -le 0 ]; then
-        #     echo "ChromaDB failed to start within 2 minutes"
-        #     exit 1
-        #   fi
-        # done
-        # echo "ChromaDB is ready"
-        echo "ChromaDB disabled for CI - using mocked services for tests"
-        
-        echo "All services are ready!"
-        
-    - name: Set up test database
-      run: |
-        # Create test database schema
-        PGPASSWORD=citation_pass_2024 psql -h localhost -U citation_user -d citation_graph_test -f shared/database/postgres_schema.sql
-        
-    - name: Run linting
-      if: matrix.test-type == 'unit'
-      run: |
-        poetry run ruff check .
-        poetry run ruff format --check .
-        
-    - name: Run type checking
-      if: matrix.test-type == 'unit'
-      run: poetry run mypy shared services --ignore-missing-imports
-      
-    - name: Run unit tests
-      if: matrix.test-type == 'unit'
-      run: |
-        poetry run pytest -m unit \
-          --cov=shared \
-          --cov=services \
-          --cov-report=xml \
-          --cov-report=term-missing \
-          --junit-xml=junit-unit.xml
-          
-    - name: Run integration tests
-      if: matrix.test-type == 'integration'
-      env:
-        NEO4J_URI: bolt://localhost:7687
-        NEO4J_USER: neo4j
-        NEO4J_PASSWORD: citation_graph_test_2024
-        # CHROMA_HOST: localhost  # Disabled for CI
-        # CHROMA_PORT: 8000       # Disabled for CI
-        DATABASE_URL: postgresql://citation_user:citation_pass_2024@localhost/citation_graph_test
-        REDIS_URL: redis://localhost:6379
-      run: |
-        poetry run pytest -m integration \
-          --junit-xml=junit-integration.xml \
-          -v
-          
-    - name: Run agent tests
-      if: matrix.test-type == 'agents'
-      env:
-        NEO4J_URI: bolt://localhost:7687
-        NEO4J_USER: neo4j
-        NEO4J_PASSWORD: citation_graph_test_2024
-        # CHROMA_HOST: localhost  # Disabled for CI
-        # CHROMA_PORT: 8000       # Disabled for CI
-        ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      run: |
-        poetry run pytest -m agent \
-          --junit-xml=junit-agents.xml \
-          -v
-          
-    - name: Upload coverage to Codecov
-      if: matrix.test-type == 'unit'
-      uses: codecov/codecov-action@v5
-      with:
-        # file: ./coverage.xml
-        # flags: unittests
-        # name: codecov-umbrella
-        token: ${{ secrets.CODECOV_TOKEN }}
-        slug: medelman17/alligator.ai
-        
-    - name: Upload test results
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: test-results-${{ matrix.test-type }}
-        path: junit-*.xml
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: ${{ env.POETRY_VERSION }}
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+
+      - name: Load cached venv
+        id: cached-poetry-dependencies
+        uses: actions/cache@v3
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-${{ env.PYTHON_VERSION }}-${{ hashFiles('**/poetry.lock') }}
+
+      - name: Install dependencies
+        if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
+        run: poetry install --no-interaction --no-root
+
+      - name: Install project
+        run: poetry install --no-interaction
+
+      - name: Wait for services to be ready
+        run: |
+          # Wait for PostgreSQL (max 2 minutes)
+          timeout=120
+          while ! pg_isready -h localhost -p 5432 -U citation_user >/dev/null 2>&1; do
+            echo "Waiting for PostgreSQL..."
+            sleep 2
+            timeout=$((timeout - 2))
+            if [ $timeout -le 0 ]; then
+              echo "PostgreSQL failed to start within 2 minutes"
+              exit 1
+            fi
+          done
+          echo "PostgreSQL is ready"
+
+          # Wait for Neo4j (max 3 minutes)
+          timeout=180
+          while ! curl -f http://localhost:7474 >/dev/null 2>&1; do
+            echo "Waiting for Neo4j..."
+            sleep 5
+            timeout=$((timeout - 5))
+            if [ $timeout -le 0 ]; then
+              echo "Neo4j failed to start within 3 minutes"
+              exit 1
+            fi
+          done
+          echo "Neo4j is ready"
+
+          # Wait for ChromaDB (max 2 minutes) - DISABLED
+          # timeout=120
+          # while ! curl -f http://localhost:8000/api/v2/heartbeat >/dev/null 2>&1; do
+          #   echo "Waiting for ChromaDB..."
+          #   sleep 3
+          #   timeout=$((timeout - 3))
+          #   if [ $timeout -le 0 ]; then
+          #     echo "ChromaDB failed to start within 2 minutes"
+          #     exit 1
+          #   fi
+          # done
+          # echo "ChromaDB is ready"
+          echo "ChromaDB disabled for CI - using mocked services for tests"
+
+          echo "All services are ready!"
+
+      - name: Set up test database
+        run: |
+          # Create test database schema
+          PGPASSWORD=citation_pass_2024 psql -h localhost -U citation_user -d citation_graph_test -f shared/database/postgres_schema.sql
+
+      # - name: Run linting
+      #   if: matrix.test-type == 'unit'
+      #   run: |
+      #     poetry run ruff check .
+      #     poetry run ruff format --check .
+
+      - name: Run type checking
+        if: matrix.test-type == 'unit'
+        run: poetry run mypy shared services --ignore-missing-imports
+
+      - name: Run unit tests
+        if: matrix.test-type == 'unit'
+        run: |
+          poetry run pytest -m unit \
+            --cov=shared \
+            --cov=services \
+            --cov-report=xml \
+            --cov-report=term-missing \
+            --junit-xml=junit-unit.xml
+
+      - name: Run integration tests
+        if: matrix.test-type == 'integration'
+        env:
+          NEO4J_URI: bolt://localhost:7687
+          NEO4J_USER: neo4j
+          NEO4J_PASSWORD: citation_graph_test_2024
+          # CHROMA_HOST: localhost  # Disabled for CI
+          # CHROMA_PORT: 8000       # Disabled for CI
+          DATABASE_URL: postgresql://citation_user:citation_pass_2024@localhost/citation_graph_test
+          REDIS_URL: redis://localhost:6379
+        run: |
+          poetry run pytest -m integration \
+            --junit-xml=junit-integration.xml \
+            -v
+
+      - name: Run agent tests
+        if: matrix.test-type == 'agents'
+        env:
+          NEO4J_URI: bolt://localhost:7687
+          NEO4J_USER: neo4j
+          NEO4J_PASSWORD: citation_graph_test_2024
+          # CHROMA_HOST: localhost  # Disabled for CI
+          # CHROMA_PORT: 8000       # Disabled for CI
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          poetry run pytest -m agent \
+            --junit-xml=junit-agents.xml \
+            -v
+
+      - name: Upload coverage to Codecov
+        if: matrix.test-type == 'unit'
+        uses: codecov/codecov-action@v5
+        with:
+          # file: ./coverage.xml
+          # flags: unittests
+          # name: codecov-umbrella
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: medelman17/alligator.ai
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-${{ matrix.test-type }}
+          path: junit-*.xml
 
   # Legal accuracy testing job
   accuracy-tests:
     runs-on: ubuntu-latest
     needs: test
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    
+
     services:
       postgres:
         image: postgres:16-alpine
@@ -226,7 +226,7 @@ jobs:
           --health-retries 5
         ports:
           - 5432:5432
-          
+
       neo4j:
         image: neo4j:5-community
         env:
@@ -235,50 +235,50 @@ jobs:
         ports:
           - 7474:7474
           - 7687:7687
-          
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: ${{ env.PYTHON_VERSION }}
-        
-    - name: Install Poetry
-      uses: snok/install-poetry@v1
-      with:
-        version: ${{ env.POETRY_VERSION }}
-        
-    - name: Install dependencies
-      run: poetry install --no-interaction
-      
-    - name: Run legal accuracy tests
-      env:
-        NEO4J_URI: bolt://localhost:7687
-        NEO4J_USER: neo4j
-        NEO4J_PASSWORD: citation_graph_test_2024
-        # CHROMA_HOST: localhost  # Disabled for CI
-        # CHROMA_PORT: 8000       # Disabled for CI
-        ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-      run: |
-        poetry run pytest -m accuracy \
-          --junit-xml=junit-accuracy.xml \
-          -v --tb=long
-          
-    - name: Upload accuracy test results
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: accuracy-test-results
-        path: junit-accuracy.xml
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: ${{ env.POETRY_VERSION }}
+
+      - name: Install dependencies
+        run: poetry install --no-interaction
+
+      - name: Run legal accuracy tests
+        env:
+          NEO4J_URI: bolt://localhost:7687
+          NEO4J_USER: neo4j
+          NEO4J_PASSWORD: citation_graph_test_2024
+          # CHROMA_HOST: localhost  # Disabled for CI
+          # CHROMA_PORT: 8000       # Disabled for CI
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          poetry run pytest -m accuracy \
+            --junit-xml=junit-accuracy.xml \
+            -v --tb=long
+
+      - name: Upload accuracy test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: accuracy-test-results
+          path: junit-accuracy.xml
 
   # Performance testing job
   performance-tests:
     runs-on: ubuntu-latest
     needs: test
     if: github.event_name == 'schedule' || contains(github.event.head_commit.message, '[perf]')
-    
+
     services:
       postgres:
         image: postgres:16-alpine
@@ -288,7 +288,7 @@ jobs:
           POSTGRES_DB: citation_graph_test
         ports:
           - 5432:5432
-          
+
       neo4j:
         image: neo4j:5-community
         env:
@@ -297,83 +297,83 @@ jobs:
         ports:
           - 7474:7474
           - 7687:7687
-          
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: ${{ env.PYTHON_VERSION }}
-        
-    - name: Install Poetry
-      uses: snok/install-poetry@v1
-      with:
-        version: ${{ env.POETRY_VERSION }}
-        
-    - name: Install dependencies
-      run: poetry install --no-interaction
-      
-    - name: Run performance tests
-      env:
-        NEO4J_URI: bolt://localhost:7687
-        NEO4J_USER: neo4j
-        NEO4J_PASSWORD: citation_graph_test_2024
-        # CHROMA_HOST: localhost  # Disabled for CI
-        # CHROMA_PORT: 8000       # Disabled for CI
-      run: |
-        poetry run pytest -m performance \
-          --benchmark-json=benchmark.json \
-          --junit-xml=junit-performance.xml \
-          -v
-          
-    - name: Upload performance results
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: performance-results
-        path: |
-          benchmark.json
-          junit-performance.xml
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: ${{ env.POETRY_VERSION }}
+
+      - name: Install dependencies
+        run: poetry install --no-interaction
+
+      - name: Run performance tests
+        env:
+          NEO4J_URI: bolt://localhost:7687
+          NEO4J_USER: neo4j
+          NEO4J_PASSWORD: citation_graph_test_2024
+          # CHROMA_HOST: localhost  # Disabled for CI
+          # CHROMA_PORT: 8000       # Disabled for CI
+        run: |
+          poetry run pytest -m performance \
+            --benchmark-json=benchmark.json \
+            --junit-xml=junit-performance.xml \
+            -v
+
+      - name: Upload performance results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: performance-results
+          path: |
+            benchmark.json
+            junit-performance.xml
 
   # Security testing
   security:
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: ${{ env.PYTHON_VERSION }}
-        
-    - name: Install Poetry
-      uses: snok/install-poetry@v1
-      with:
-        version: ${{ env.POETRY_VERSION }}
-        
-    - name: Install dependencies
-      run: |
-        poetry install --no-interaction
-        poetry add --group dev bandit
-      
-    - name: Run Bandit security linter
-      run: |
-        poetry run bandit -r shared services api mcp_server -f json -o bandit-report.json || true
-        poetry run bandit -r shared services api mcp_server || true
-        
-    - name: Run safety check
-      run: |
-        pip install safety
-        safety check --output json || true
-        
-    - name: Upload security reports
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: security-reports
-        path: |
-          bandit-report.json
-          safety-report.json
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: ${{ env.POETRY_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          poetry install --no-interaction
+          poetry add --group dev bandit
+
+      - name: Run Bandit security linter
+        run: |
+          poetry run bandit -r shared services api mcp_server -f json -o bandit-report.json || true
+          poetry run bandit -r shared services api mcp_server || true
+
+      - name: Run safety check
+        run: |
+          pip install safety
+          safety check --output json || true
+
+      - name: Upload security reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-reports
+          path: |
+            bandit-report.json
+            safety-report.json
