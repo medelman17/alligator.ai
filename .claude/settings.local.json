@@ -27,8 +27,10 @@
       "Bash(ls:*)",
       "Bash(tree:*)",
       "Bash(touch:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git push:*)"
     ],
     "deny": []
-  }
+  },
+  "enableAllProjectMcpServers": true
 }

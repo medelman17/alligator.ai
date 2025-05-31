@@ -77,17 +77,17 @@ alligator.ai combines cutting-edge AI technology with deep legal expertise to de
 ### Prerequisites
 
 - Python 3.11+
-- Node.js 18+
+- Node.js 18+ (if building frontend)
 - Docker and Docker Compose
 - Poetry for Python dependency management
-- pnpm for JavaScript dependency management
+- pnpm for JavaScript dependency management (if building frontend)
 
 ### Installation
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/alligator-ai.git
-cd alligator-ai
+git clone https://github.com/yourusername/citation_graph.git
+cd citation_graph
 ```
 
 2. Install backend dependencies:
@@ -101,14 +101,45 @@ cp .env.example .env
 # Edit .env with your API keys and configuration
 ```
 
-4. Start the development environment:
+4. Start the infrastructure services:
 ```bash
 docker compose up -d
 ```
 
-5. Run the development server:
+5. Wait for services to be healthy:
 ```bash
-poetry run python -m uvicorn app.main:app --reload
+docker compose ps
+# All services should show as "healthy"
+```
+
+6. Run database migrations (once PostgreSQL is ready):
+```bash
+poetry run alembic upgrade head
+```
+
+7. Run the development server:
+```bash
+poetry run python -m uvicorn api.main:app --reload --port 8001
+```
+
+The API will be available at http://localhost:8001
+
+### Project Structure
+
+```
+citation_graph/
+├── services/              # Microservices
+│   ├── orchestration/     # LangGraph multi-agent orchestration
+│   ├── graph/            # Neo4j citation network analysis
+│   ├── vector/           # ChromaDB semantic search
+│   ├── llm/              # LLM provider abstraction
+│   └── memory/           # Multi-tier memory system
+├── api/                  # FastAPI gateway
+├── mcp_server/           # MCP server for AI assistants
+├── shared/               # Shared utilities and models
+├── tests/                # Test suite
+├── scripts/              # Utility scripts
+└── docker/               # Docker configurations
 ```
 
 ### Using the MCP Server

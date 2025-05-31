@@ -1,0 +1,81 @@
+version: '3.8'
+
+services:
+  neo4j:
+    image: neo4j:5-community
+    container_name: citation_graph_neo4j
+    ports:
+      - "7474:7474"  # HTTP
+      - "7687:7687"  # Bolt
+    environment:
+      - NEO4J_AUTH=neo4j/citation_graph_2024
+      - NEO4J_PLUGINS=["graph-data-science"]
+      - NEO4J_dbms_memory_heap_max__size=1G
+      - NEO4J_dbms_memory_pagecache_size=1G
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+    healthcheck:
+      test: ["CMD", "neo4j", "status"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: citation_graph_chromadb
+    ports:
+      - "8000:8000"
+    environment:
+      - CHROMA_SERVER_AUTH_PROVIDER=chromadb.auth.token.TokenAuthServerProvider
+      - CHROMA_SERVER_AUTH_CREDENTIALS=citation_graph_token_2024
+      - PERSIST_DIRECTORY=/chroma/data
+    volumes:
+      - chroma_data:/chroma/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: citation_graph_postgres
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=citation_user
+      - POSTGRES_PASSWORD=citation_pass_2024
+      - POSTGRES_DB=citation_graph
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U citation_user -d citation_graph"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: citation_graph_redis
+    ports:
+      - "6379:6379"
+    command: redis-server --requirepass citation_redis_2024
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+volumes:
+  neo4j_data:
+  neo4j_logs:
+  chroma_data:
+  postgres_data:
+  redis_data:
+
+networks:
+  default:
+    name: citation_graph_network
