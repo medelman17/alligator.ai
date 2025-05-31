@@ -26,12 +26,22 @@ poetry run pytest
 # Run specific test
 poetry run pytest tests/test_name.py::test_function
 
+# Run test categories with custom script
+python scripts/run_tests.py --unit          # Unit tests only
+python scripts/run_tests.py --integration   # Integration tests  
+python scripts/run_tests.py --agents        # Agent workflow tests
+python scripts/run_tests.py --quick         # Fast unit tests, no coverage
+
 # Lint and format
 poetry run ruff check .
 poetry run ruff format .
 
 # Type checking
 poetry run mypy .
+
+# Security scanning
+poetry run bandit -r shared services api mcp_server
+poetry run safety check
 ```
 
 ### Frontend (if applicable)
@@ -129,7 +139,13 @@ See `MCP_SERVER_DESIGN.md` and `MCP_IMPLEMENTATION.md` for implementation detail
    - Structured output parsing and function calling
    - Cost optimization and rate limiting
 
-5. **API Gateway** (`/api/`)
+5. **Document Ingestion Service** (`/services/ingestion/`)
+   - Automated legal document acquisition from multiple sources
+   - CourtListener, Justia, Google Scholar integration
+   - Cost-controlled LLM processing with tiered analysis
+   - Eventual consistency storage across databases
+
+6. **API Gateway** (`/api/`)
    - FastAPI-based REST API
    - Authentication and authorization
    - Request routing to microservices
@@ -239,15 +255,42 @@ python scripts/run_tests.py --coverage      # HTML + XML coverage reports
 python scripts/run_tests.py --lint          # Ruff linting + mypy type checking
 ```
 
-**CI/CD Pipeline** (GitHub Actions):
-- Matrix testing across test categories
+**CI/CD Pipeline** (GitHub Actions) ✅ FULLY OPERATIONAL:
+- Matrix testing across test categories (unit, integration, agents)
 - Database service provisioning (Neo4j, ChromaDB, PostgreSQL, Redis)
-- Automated security scanning
+- Automated security scanning (Bandit + Safety) with zero issues
 - Coverage reporting to Codecov
 - Performance regression detection
+- Local testing support with `gh act` for faster iteration
 
 **Test Database Setup**:
 - Isolated test databases for each service
 - Automatic test data cleanup
 - Mock services for external dependencies
 - Dockerized testing environment
+
+## Important Development Notes
+
+### Current Status ✅
+- **Development Environment**: Fully operational with all services running
+- **CI/CD Pipeline**: All tests and security scans passing
+- **Documentation**: Comprehensive architecture and implementation guides available
+- **Code Quality**: Zero security issues, proper error handling implemented
+
+### Key Implementation Decisions
+1. **Eventual Consistency**: Chose over distributed transactions for ingestion system
+2. **Cost Controls**: Implemented tiered LLM processing with budget limits  
+3. **MVP-First Approach**: CourtListener integration prioritized for Phase 1
+4. **Batch Processing**: Gap detection runs on schedule vs real-time for performance
+
+### Database Endpoints (Local Development)
+- **Neo4j**: http://localhost:7474 (Bolt: 7687)
+- **ChromaDB**: http://localhost:8000/api/v2/heartbeat  
+- **PostgreSQL**: localhost:5432 (citation_user/citation_pass_2024)
+- **Redis**: localhost:6379 (auth: citation_redis_2024)
+
+### Next Implementation Priorities
+1. Start Phase 1 ingestion system (CourtListener MVP)
+2. Implement core service classes (Neo4jService, ChromaService)
+3. Add database schemas and sample data
+4. Build basic research agent workflows

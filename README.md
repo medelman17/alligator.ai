@@ -110,6 +110,23 @@ docker compose up -d
 ```bash
 docker compose ps
 # All services should show as "healthy"
+# Services: Neo4j (ports 7474/7687), ChromaDB (port 8000), 
+#          PostgreSQL (port 5432), Redis (port 6379)
+```
+
+You can verify services are working:
+```bash
+# Test Neo4j
+curl http://localhost:7474
+
+# Test ChromaDB
+curl http://localhost:8000/api/v2/heartbeat
+
+# Test PostgreSQL
+PGPASSWORD=citation_pass_2024 psql -h localhost -U citation_user -d citation_graph -c "SELECT 1;"
+
+# Test Redis
+redis-cli -a citation_redis_2024 ping
 ```
 
 6. Run database migrations (once PostgreSQL is ready):
@@ -166,7 +183,13 @@ docker build -t alligator-ai-mcp:latest -f mcp_server/Dockerfile .
 - [Product Requirements Document](PRD.md) - Detailed product vision and requirements
 - [Development Guide](CLAUDE.md) - Architecture and development guidelines
 - [Memory Architecture](MEMORY_ARCHITECTURE.md) - Memory system design
+- [Memory Implementation](MEMORY_IMPLEMENTATION.md) - Memory system implementation details
 - [MCP Server Design](MCP_SERVER_DESIGN.md) - MCP integration details
+- [MCP Implementation](MCP_IMPLEMENTATION.md) - MCP server implementation guide
+- [Ingestion Architecture](INGESTION_ARCHITECTURE.md) - Automated document ingestion system
+- [Ingestion Implementation](INGESTION_IMPLEMENTATION.md) - Practical ingestion implementation plan
+- [Graphiti Architecture](GRAPHITI_ARCHITECTURE.md) - Temporal knowledge evolution system
+- [Graphiti Implementation](GRAPHITI_IMPLEMENTATION.md) - Graphiti integration details
 
 ## Development
 
@@ -201,15 +224,30 @@ python scripts/run_tests.py --check-db
 - **Agent Tests**: LangGraph workflow validation and AI agent behavior
 - **Performance Tests**: Load testing and benchmark validation
 
-### Code Quality
+### Code Quality & Security
 ```bash
 # Run all quality checks
 python scripts/run_tests.py --lint
+
+# Security scanning
+poetry run bandit -r shared services api mcp_server    # Security vulnerability scanning
+poetry run safety check                                # Dependency vulnerability check
 
 # Or run individually
 poetry run ruff check .      # Linting
 poetry run ruff format .     # Code formatting
 poetry run mypy .            # Static type checking
+```
+
+### Local GitHub Actions Testing
+```bash
+# Test GitHub Actions workflows locally using act
+gh act --job security                    # Test security scanning
+gh act --job test                       # Test full test suite
+gh act --list                          # List available workflows
+
+# Dry run (validate without executing)
+gh act --job security --dryrun
 ```
 
 ### Building for Production
