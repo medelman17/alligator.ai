@@ -330,6 +330,63 @@ class Neo4jService:
         except Exception as e:
             logger.error(f"Neo4j health check failed: {e}")
             return False
+    
+    # Additional methods needed by API endpoints
+    async def get_case_by_id(self, case_id: str) -> Optional[Case]:
+        """Get a case by its ID."""
+        async with self.driver.session() as session:
+            result = await session.run(
+                "MATCH (c:Case {id: $case_id}) RETURN c",
+                case_id=case_id
+            )
+            record = await result.single()
+            if record:
+                return self._record_to_case(record["c"])
+            return None
+    
+    async def calculate_authority_score(self, case_id: str) -> float:
+        """Calculate authority score for a specific case."""
+        async with self.driver.session() as session:
+            result = await session.run(
+                "MATCH (c:Case {id: $case_id}) RETURN coalesce(c.authority_score, 0.0) as score",
+                case_id=case_id
+            )
+            record = await result.single()
+            if record:
+                return float(record["score"])
+            return 0.0
+    
+    async def update_case(self, case_id: str, update_data: dict) -> None:
+        """Update case properties."""
+        async with self.driver.session() as session:
+            # Convert datetime objects to ISO strings
+            for key, value in update_data.items():
+                if isinstance(value, datetime):
+                    update_data[key] = value.isoformat()
+            
+            await session.run(
+                "MATCH (c:Case {id: $case_id}) SET c += $update_data",
+                case_id=case_id,
+                update_data=update_data
+            )
+    
+    async def delete_case(self, case_id: str) -> None:
+        """Delete a case and all its relationships."""
+        async with self.driver.session() as session:
+            await session.run(
+                "MATCH (c:Case {id: $case_id}) DETACH DELETE c",
+                case_id=case_id
+            )
+    
+    async def get_citation_network(self, case_id: str, depth: int = 2) -> Dict[str, Any]:
+        """Get citation network for a case."""
+        citing_cases = await self.get_citing_cases(case_id, limit=100)
+        cited_cases = await self.get_cited_cases(case_id, limit=100)
+        
+        return {
+            "citing_cases": citing_cases,
+            "cited_cases": cited_cases
+        }
 
 
 # Example usage and testing

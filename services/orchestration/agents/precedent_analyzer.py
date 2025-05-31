@@ -95,6 +95,24 @@ class PrecedentAnalyzer:
         
         return workflow.compile()
     
+    # Alias method for API compatibility
+    async def analyze_precedent(
+        self,
+        case_id: str,
+        query: str,
+        jurisdiction: Optional[str] = None,
+        depth: int = 2,
+        include_treatments: bool = True,
+        **kwargs
+    ) -> Dict[str, Any]:
+        """Analyze precedent for a specific case (API compatibility method)."""
+        return await self.analyze_precedents(
+            query=query,
+            jurisdiction=jurisdiction,
+            target_case_id=case_id,
+            **kwargs
+        )
+    
     async def analyze_precedents(
         self,
         query: str,

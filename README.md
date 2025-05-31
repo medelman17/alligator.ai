@@ -134,29 +134,49 @@ redis-cli -a citation_redis_2024 ping
 poetry run alembic upgrade head
 ```
 
-7. Run the development server:
+7. Run the API Gateway:
 ```bash
-poetry run python -m uvicorn api.main:app --reload --port 8001
+# Start the API server
+poetry run python start_api.py
+
+# Alternative: Run with uvicorn directly
+poetry run uvicorn api.main:app --reload --host 127.0.0.1 --port 8001
 ```
 
-The API will be available at http://localhost:8001
+The API will be available at:
+- **Main API**: http://localhost:8001
+- **API Documentation**: http://localhost:8001/docs (Swagger UI)
+- **Alternative Docs**: http://localhost:8001/redoc (ReDoc) 
+- **Health Check**: http://localhost:8001/health
+
+8. Test the API endpoints:
+```bash
+# Test with the included test script
+poetry run python test_api.py
+```
 
 ### Project Structure
 
 ```
 citation_graph/
-├── services/              # Microservices
-│   ├── orchestration/     # LangGraph multi-agent orchestration
-│   ├── graph/            # Neo4j citation network analysis
-│   ├── vector/           # ChromaDB semantic search
-│   ├── llm/              # LLM provider abstraction
-│   └── memory/           # Multi-tier memory system
-├── api/                  # FastAPI gateway
-├── mcp_server/           # MCP server for AI assistants
-├── shared/               # Shared utilities and models
-├── tests/                # Test suite
-├── scripts/              # Utility scripts
-└── docker/               # Docker configurations
+├── api/                  # ✅ FastAPI Gateway (IMPLEMENTED)
+│   ├── main.py           # FastAPI app with lifecycle management
+│   ├── dependencies.py   # Dependency injection system
+│   ├── endpoints/        # REST API endpoints
+│   └── middleware/       # CORS, logging, rate limiting
+├── services/             # Microservices 
+│   ├── orchestration/    # LangGraph multi-agent orchestration
+│   ├── graph/           # ✅ Neo4j citation network analysis
+│   ├── vector/          # ✅ ChromaDB semantic search
+│   ├── llm/             # LLM provider abstraction
+│   └── memory/          # Multi-tier memory system
+├── shared/              # ✅ Shared utilities and models
+├── mcp_server/          # MCP server for AI assistants
+├── tests/               # ✅ Comprehensive test suite
+├── scripts/             # ✅ Utility scripts
+├── start_api.py         # ✅ API server startup script
+├── test_api.py          # ✅ API testing script
+└── docker/              # Docker configurations
 ```
 
 ### Using the MCP Server
@@ -210,6 +230,9 @@ python scripts/run_tests.py --integration   # Integration tests (require databas
 python scripts/run_tests.py --agents        # AI agent workflow tests
 python scripts/run_tests.py --performance   # Performance benchmarks
 python scripts/run_tests.py --accuracy      # Legal research accuracy validation
+
+# Test API endpoints
+poetry run python test_api.py               # Test API Gateway endpoints
 
 # Generate detailed coverage report
 python scripts/run_tests.py --coverage

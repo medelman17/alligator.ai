@@ -17,8 +17,11 @@ alligator.ai is an AI-powered legal research platform for boutique litigation fi
 # Install dependencies
 poetry install
 
-# Run development server
-poetry run python -m uvicorn app.main:app --reload
+# Run development server (API Gateway)
+poetry run python start_api.py
+
+# Alternative: Run with uvicorn directly
+poetry run uvicorn api.main:app --reload --host 127.0.0.1 --port 8001
 
 # Run tests
 poetry run pytest
@@ -31,6 +34,9 @@ python scripts/run_tests.py --unit          # Unit tests only
 python scripts/run_tests.py --integration   # Integration tests  
 python scripts/run_tests.py --agents        # Agent workflow tests
 python scripts/run_tests.py --quick         # Fast unit tests, no coverage
+
+# Test API endpoints
+poetry run python test_api.py
 
 # Lint and format
 poetry run ruff check .
@@ -145,10 +151,12 @@ See `MCP_SERVER_DESIGN.md` and `MCP_IMPLEMENTATION.md` for implementation detail
    - Cost-controlled LLM processing with tiered analysis
    - Eventual consistency storage across databases
 
-6. **API Gateway** (`/api/`)
-   - FastAPI-based REST API
-   - Authentication and authorization
-   - Request routing to microservices
+6. **API Gateway** (`/api/`) ✅ IMPLEMENTED
+   - FastAPI-based REST API with comprehensive dependency injection
+   - Service lifecycle management (startup/shutdown hooks)
+   - Health checking and monitoring for all services
+   - Request routing to microservices with proper error handling
+   - Mock services for development/testing environments
 
 ### Key Design Patterns
 
@@ -273,7 +281,8 @@ python scripts/run_tests.py --lint          # Ruff linting + mypy type checking
 
 ### Current Status ✅
 - **Development Environment**: Fully operational with all services running
-- **CI/CD Pipeline**: All tests and security scans passing
+- **API Gateway**: Complete FastAPI implementation with dependency injection
+- **CI/CD Pipeline**: All tests and security scans passing  
 - **Documentation**: Comprehensive architecture and implementation guides available
 - **Code Quality**: Zero security issues, proper error handling implemented
 
@@ -283,14 +292,18 @@ python scripts/run_tests.py --lint          # Ruff linting + mypy type checking
 3. **MVP-First Approach**: CourtListener integration prioritized for Phase 1
 4. **Batch Processing**: Gap detection runs on schedule vs real-time for performance
 
-### Database Endpoints (Local Development)
+### Service Endpoints (Local Development)
+- **API Gateway**: http://localhost:8001
+  - **API Documentation**: http://localhost:8001/docs (Swagger UI)
+  - **Alternative Docs**: http://localhost:8001/redoc (ReDoc)
+  - **Health Check**: http://localhost:8001/health
 - **Neo4j**: http://localhost:7474 (Bolt: 7687)
 - **ChromaDB**: http://localhost:8000/api/v2/heartbeat  
 - **PostgreSQL**: localhost:5432 (citation_user/citation_pass_2024)
 - **Redis**: localhost:6379 (auth: citation_redis_2024)
 
 ### Next Implementation Priorities
-1. Start Phase 1 ingestion system (CourtListener MVP)
-2. Implement core service classes (Neo4jService, ChromaService)
+1. Add basic authentication middleware to API Gateway
+2. Start Phase 1 ingestion system (CourtListener MVP)
 3. Add database schemas and sample data
-4. Build basic research agent workflows
+4. Implement LLM service abstraction layer

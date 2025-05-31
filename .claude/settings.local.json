@@ -58,7 +58,9 @@
       "Bash(act:*)",
       "Bash(gh act:*)",
       "Bash(poetry add:*)",
-      "Bash(yamllint:*)"
+      "Bash(yamllint:*)",
+      "Bash(pkill:*)",
+      "Bash(timeout:*)"
     ],
     "deny": []
   },
