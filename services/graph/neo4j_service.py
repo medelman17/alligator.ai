@@ -1,44 +1,403 @@
 """
 Neo4j database service for legal citation graph operations.
+
+Enhanced version with sophisticated legal research capabilities including:
+- Advanced citation treatment analysis
+- Legal authority calculations with multi-factor scoring  
+- Good law verification and precedent discovery
+- Doctrine evolution tracking
+- Performance-optimized legal research queries
 """
 
 import asyncio
 from typing import List, Dict, Any, Optional, Tuple
-from datetime import datetime
+from datetime import datetime, date
 from neo4j import AsyncGraphDatabase, Record
 import logging
 
 from shared.models.legal_entities import Case, Court, Judge, Citation, LegalConcept, Statute
 from shared.database.neo4j_schema import CASE_QUERIES, GRAPH_ALGORITHMS
+from shared.database.enhanced_neo4j_schema import ENHANCED_LEGAL_QUERIES, EnhancedNeo4jSchemaManager
 
 
 logger = logging.getLogger(__name__)
 
 
 class Neo4jService:
-    """Service for Neo4j graph database operations."""
+    """
+    Enhanced Neo4j service for sophisticated legal research operations.
+    
+    Provides both legacy compatibility and advanced legal research features:
+    - Traditional CRUD operations for cases, courts, judges
+    - Enhanced citation analysis with treatment classification
+    - Authority scoring with multi-factor calculations
+    - Legal research query optimization
+    - Good law verification and precedent discovery
+    """
     
     def __init__(self, uri: str, user: str, password: str):
         self.driver = AsyncGraphDatabase.driver(uri, auth=(user, password))
         self.connected = False
+        self.enhanced_schema_available = False
+        self.schema_manager = EnhancedNeo4jSchemaManager(uri, user, password)
     
     async def connect(self):
-        """Establish connection to Neo4j."""
+        """Establish connection to Neo4j and initialize enhanced schema if needed."""
         try:
             await self.driver.verify_connectivity()
             self.connected = True
-            logger.info("Connected to Neo4j database")
+            logger.info("✅ Connected to Neo4j database")
+            
+            # Check for and initialize enhanced schema
+            await self._check_enhanced_schema()
+            
         except Exception as e:
-            logger.error(f"Failed to connect to Neo4j: {e}")
+            logger.error(f"❌ Failed to connect to Neo4j: {e}")
             raise
+    
+    async def _check_enhanced_schema(self):
+        """Check if enhanced schema is available and initialize if needed."""
+        async with self.driver.session() as session:
+            try:
+                # Check if enhanced schema exists
+                result = await session.run(
+                    "MATCH (c:Case) WHERE c.good_law_status IS NOT NULL RETURN count(c) as enhanced_cases LIMIT 1"
+                )
+                record = await result.single()
+                
+                if record and record["enhanced_cases"] > 0:
+                    self.enhanced_schema_available = True
+                    logger.info("✅ Enhanced legal schema detected")
+                else:
+                    logger.info("🚀 Initializing enhanced legal schema...")
+                    await self.schema_manager.create_enhanced_schema()
+                    self.enhanced_schema_available = True
+                    
+            except Exception as e:
+                logger.warning(f"⚠️ Enhanced schema initialization failed, using basic schema: {e}")
+                self.enhanced_schema_available = False
     
     async def close(self):
         """Close the database connection."""
         if self.driver:
             await self.driver.close()
             self.connected = False
+        if hasattr(self, 'schema_manager'):
+            self.schema_manager.close()
     
-    # Case operations
+    # === ENHANCED LEGAL RESEARCH METHODS ===
+    
+    async def find_authoritative_precedents(
+        self,
+        case_id: str,
+        target_jurisdictions: List[str],
+        practice_areas: List[str],
+        primary_jurisdiction: str = None,
+        limit: int = 25
+    ) -> List[Dict[str, Any]]:
+        """
+        Find authoritative precedents with sophisticated relevance scoring.
+        
+        Uses multi-factor authority calculation considering:
+        - Landmark case status
+        - Practice area overlap  
+        - Jurisdictional authority
+        - Citation network analysis
+        """
+        if not self.enhanced_schema_available:
+            logger.warning("Enhanced schema not available, falling back to basic precedent search")
+            return await self._basic_precedent_search(case_id, target_jurisdictions, practice_areas, limit)
+        
+        async with self.driver.session() as session:
+            result = await session.run(
+                ENHANCED_LEGAL_QUERIES["find_authoritative_precedents"],
+                case_id=case_id,
+                target_jurisdictions=target_jurisdictions,
+                practice_areas=practice_areas,
+                primary_jurisdiction=primary_jurisdiction or target_jurisdictions[0]
+            )
+            records = await result.data()
+            
+            precedents = []
+            for record in records:
+                case_data = self._record_to_case(record["related"])
+                precedents.append({
+                    "case": case_data,
+                    "relevance_score": record["relevance_score"],
+                    "authority_factors": {
+                        "landmark_case": getattr(case_data, 'landmark_case', False),
+                        "authority_score": case_data.authority_score,
+                        "jurisdiction": case_data.jurisdiction,
+                        "practice_areas": case_data.practice_areas
+                    }
+                })
+            
+            return precedents
+    
+    async def analyze_citation_treatment(self, case_id: str) -> Dict[str, Any]:
+        """
+        Analyze how a case has been treated by subsequent courts.
+        
+        Returns comprehensive treatment analysis including:
+        - Positive/negative/neutral citation counts
+        - Authority-weighted impact scores  
+        - Good law confidence assessment
+        - Recent citation trends
+        """
+        if not self.enhanced_schema_available:
+            logger.warning("Enhanced schema not available, using basic citation analysis")
+            return await self._basic_citation_analysis(case_id)
+        
+        async with self.driver.session() as session:
+            result = await session.run(
+                ENHANCED_LEGAL_QUERIES["analyze_citation_treatment"],
+                case_id=case_id
+            )
+            record = await result.single()
+            
+            if record:
+                return record["treatment_analysis"]
+            else:
+                return {
+                    "case": None,
+                    "total_citations": 0,
+                    "positive_citations": 0,
+                    "negative_citations": 0,
+                    "neutral_citations": 0,
+                    "weighted_authority_impact": 0.0,
+                    "good_law_confidence": "unknown",
+                    "recent_citations": []
+                }
+    
+    async def verify_good_law_status(self, case_id: str) -> Dict[str, Any]:
+        """
+        Verify if a case is still good law.
+        
+        Analyzes citation treatments to determine:
+        - Current legal status
+        - Overruling cases (if any)
+        - Good law confidence level
+        - Treatment trend analysis
+        """
+        if not self.enhanced_schema_available:
+            logger.warning("Enhanced schema not available, using basic good law check")
+            return {"case_id": case_id, "good_law_confidence": "unknown", "message": "Enhanced schema required"}
+        
+        async with self.driver.session() as session:
+            result = await session.run(
+                ENHANCED_LEGAL_QUERIES["good_law_verification"],
+                case_id=case_id
+            )
+            record = await result.single()
+            
+            return record["verification_result"] if record else {
+                "case_id": case_id,
+                "current_status": "unknown",
+                "good_law_confidence": "unknown",
+                "overruled_by": [],
+                "negative_treatment_count": 0,
+                "positive_treatment_count": 0
+            }
+    
+    async def calculate_legal_authority_pagerank(self) -> Dict[str, Any]:
+        """
+        Calculate PageRank authority scores with legal domain weighting.
+        
+        Uses enhanced citation network with authority factors:
+        - Citation strength
+        - Treatment type
+        - Court hierarchy  
+        - Temporal relevance
+        """
+        if not self.enhanced_schema_available:
+            logger.warning("Enhanced schema not available, using basic PageRank")
+            return await self._basic_pagerank()
+        
+        async with self.driver.session() as session:
+            result = await session.run(
+                ENHANCED_LEGAL_QUERIES["calculate_legal_authority_pagerank"]
+            )
+            record = await result.single()
+            
+            return {
+                "nodes_updated": record["nodePropertiesWritten"],
+                "iterations": record["ranIterations"],
+                "converged": record["didConverged"],
+                "algorithm": "legal_authority_pagerank"
+            } if record else {"error": "PageRank calculation failed"}
+    
+    async def semantic_case_search(
+        self,
+        search_terms: str,
+        jurisdictions: List[str] = None,
+        practice_areas: List[str] = None,
+        court_levels: List[str] = None,
+        date_range: Tuple[date, date] = None,
+        good_law_only: bool = True,
+        limit: int = 50
+    ) -> List[Dict[str, Any]]:
+        """
+        Enhanced semantic search with legal domain filtering.
+        
+        Combines full-text search with legal metadata filtering
+        for sophisticated case discovery.
+        """
+        async with self.driver.session() as session:
+            # Try enhanced full-text search first
+            if self.enhanced_schema_available:
+                try:
+                    return await self._enhanced_semantic_search(session, search_terms, jurisdictions, 
+                                                               practice_areas, court_levels, date_range, 
+                                                               good_law_only, limit)
+                except Exception as e:
+                    logger.warning(f"Enhanced search failed, falling back to basic: {e}")
+            
+            # Fallback to basic text search
+            return await self._basic_text_search(session, search_terms, jurisdictions, practice_areas, limit)
+    
+    # === ENHANCED HELPER METHODS ===
+    
+    async def _basic_precedent_search(self, case_id: str, jurisdictions: List[str], practice_areas: List[str], limit: int):
+        """Fallback precedent search for basic schema."""
+        results = await self.traverse_citation_network(case_id, max_depth=2, limit=limit)
+        return [{
+            "case": result["case"],
+            "relevance_score": 5.0 - result["distance"],  # Simple distance-based scoring
+            "authority_factors": {
+                "authority_score": result["case"].authority_score,
+                "jurisdiction": result["case"].jurisdiction
+            }
+        } for result in results if result["case"].jurisdiction in jurisdictions]
+    
+    async def _basic_citation_analysis(self, case_id: str):
+        """Basic citation analysis without enhanced treatment types."""
+        citing_cases = await self.get_citing_cases(case_id, limit=100)
+        cited_cases = await self.get_cited_cases(case_id, limit=100)
+        
+        return {
+            "case": await self.get_case_by_id(case_id),
+            "total_citations": len(citing_cases),
+            "positive_citations": len(citing_cases),  # Assume all positive for basic
+            "negative_citations": 0,
+            "neutral_citations": 0,
+            "good_law_confidence": "moderate",
+            "recent_citations": [
+                {
+                    "case_name": case.case_name,
+                    "treatment": citation.treatment if hasattr(citation, 'treatment') else "cited",
+                    "date": case.decision_date.isoformat() if case.decision_date else None
+                }
+                for case, citation in citing_cases[:10]
+            ]
+        }
+    
+    async def _basic_pagerank(self):
+        """Basic PageRank calculation."""
+        nodes_updated = await self.calculate_authority_scores()
+        return {
+            "nodes_updated": nodes_updated,
+            "algorithm": "basic_pagerank",
+            "iterations": "unknown"
+        }
+    
+    async def _enhanced_semantic_search(self, session, search_terms, jurisdictions, practice_areas, 
+                                       court_levels, date_range, good_law_only, limit):
+        """Enhanced semantic search with full-text indexing."""
+        query_parts = []
+        where_conditions = []
+        params = {"search_terms": search_terms, "limit": limit}
+        
+        # Full-text search
+        query_parts.append("""
+            CALL db.index.fulltext.queryNodes("legal_content_search", $search_terms) 
+            YIELD node as c, score
+            WHERE c:Case
+        """)
+        
+        # Apply filters
+        if good_law_only:
+            where_conditions.append("c.good_law_status = 'good_law'")
+        
+        if jurisdictions:
+            where_conditions.append("c.jurisdiction IN $jurisdictions")
+            params["jurisdictions"] = jurisdictions
+        
+        if practice_areas:
+            where_conditions.append("ANY(area IN c.practice_areas WHERE area IN $practice_areas)")
+            params["practice_areas"] = practice_areas
+        
+        if court_levels:
+            query_parts.append("MATCH (c)-[:DECIDED_BY]->(ct:Court)")
+            where_conditions.append("ct.level IN $court_levels")
+            params["court_levels"] = court_levels
+        
+        if date_range:
+            where_conditions.append("c.decision_date >= $start_date AND c.decision_date <= $end_date")
+            params["start_date"] = date_range[0].isoformat()
+            params["end_date"] = date_range[1].isoformat()
+        
+        if where_conditions:
+            query_parts.append("WHERE " + " AND ".join(where_conditions))
+        
+        query_parts.append("""
+            RETURN c, score,
+                c.authority_score * score as relevance_score
+            ORDER BY relevance_score DESC
+            LIMIT $limit
+        """)
+        
+        query = "\n".join(query_parts)
+        result = await session.run(query, **params)
+        records = await result.data()
+        
+        return [{
+            "case": self._record_to_case(record["c"]),
+            "text_score": record["score"],
+            "relevance_score": record["relevance_score"],
+            "authority_score": record["c"]["authority_score"]
+        } for record in records]
+    
+    async def _basic_text_search(self, session, search_terms, jurisdictions, practice_areas, limit):
+        """Fallback text search when full-text index is unavailable."""
+        where_conditions = []
+        params = {"search_terms": search_terms.lower(), "limit": limit}
+        
+        query_parts = ["""
+            MATCH (c:Case)
+            WHERE toLower(c.case_name) CONTAINS $search_terms
+               OR toLower(c.summary) CONTAINS $search_terms
+               OR toLower(c.holding) CONTAINS $search_terms
+        """]
+        
+        if jurisdictions:
+            where_conditions.append("c.jurisdiction IN $jurisdictions")
+            params["jurisdictions"] = jurisdictions
+        
+        if practice_areas:
+            where_conditions.append("ANY(area IN c.practice_areas WHERE area IN $practice_areas)")
+            params["practice_areas"] = practice_areas
+        
+        if where_conditions:
+            query_parts.append("AND " + " AND ".join(where_conditions))
+        
+        query_parts.append("""
+            RETURN c, c.authority_score as relevance_score
+            ORDER BY relevance_score DESC
+            LIMIT $limit
+        """)
+        
+        query = "\n".join(query_parts)
+        result = await session.run(query, **params)
+        records = await result.data()
+        
+        return [{
+            "case": self._record_to_case(record["c"]),
+            "text_score": 0.5,  # Default score for fallback
+            "relevance_score": record["relevance_score"],
+            "authority_score": record["relevance_score"]
+        } for record in records]
+    
+    # === TRADITIONAL CASE OPERATIONS (ENHANCED) ===
     async def create_case(self, case: Case) -> Case:
         """Create or update a case in the graph."""
         async with self.driver.session() as session:
