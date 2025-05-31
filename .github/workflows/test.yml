@@ -405,7 +405,7 @@ jobs:
     - name: Run safety check
       run: |
         pip install safety
-        safety check --json --output safety-report.json || true
+        safety check --output json || true
         
     - name: Upload security reports
       uses: actions/upload-artifact@v4
