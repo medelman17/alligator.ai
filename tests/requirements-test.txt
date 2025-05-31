@@ -1,0 +1,39 @@
+# Testing dependencies for citation graph platform
+
+# Core testing framework
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+pytest-cov>=4.1.0
+pytest-mock>=3.11.0
+pytest-xdist>=3.3.0  # For parallel test execution
+
+# Testing utilities
+factory-boy>=3.3.0  # For creating test data
+faker>=19.0.0       # For generating fake data
+freezegun>=1.2.0    # For mocking datetime
+responses>=0.23.0   # For mocking HTTP requests
+
+# Performance testing
+pytest-benchmark>=4.0.0
+
+# Database testing utilities
+pytest-postgresql>=5.0.0  # For PostgreSQL testing
+testcontainers>=3.7.0     # For container-based testing
+
+# AI/ML testing
+hypothesis>=6.82.0  # Property-based testing for data validation
+
+# Coverage reporting
+coverage[toml]>=7.3.0
+
+# Test data generation for legal domain
+python-dateutil>=2.8.0  # For date parsing in test data
+
+# Async testing support
+aioresponses>=0.7.0  # For mocking async HTTP requests
+asynctest>=0.13.0    # Additional async testing utilities
+
+# Legal-specific test data
+# (These would be custom libraries for generating realistic legal test data)
+# legal-test-data>=1.0.0  # Hypothetical library for legal test fixtures
+# case-law-generator>=1.0.0  # Hypothetical library for generating case law test data

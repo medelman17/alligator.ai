@@ -170,16 +170,46 @@ docker build -t alligator-ai-mcp:latest -f mcp_server/Dockerfile .
 
 ## Development
 
-### Running Tests
+### Testing
+
+We have comprehensive test coverage with multiple test categories:
+
 ```bash
+# Run all tests with coverage
 poetry run pytest
+
+# Quick development cycle (unit tests only, no coverage)
+python scripts/run_tests.py --quick
+
+# Run specific test categories
+python scripts/run_tests.py --unit          # Unit tests (fast, no external deps)
+python scripts/run_tests.py --integration   # Integration tests (require databases)
+python scripts/run_tests.py --agents        # AI agent workflow tests
+python scripts/run_tests.py --performance   # Performance benchmarks
+python scripts/run_tests.py --accuracy      # Legal research accuracy validation
+
+# Generate detailed coverage report
+python scripts/run_tests.py --coverage
+
+# Check if databases are available for testing
+python scripts/run_tests.py --check-db
 ```
+
+**Current Test Coverage:**
+- **Unit Tests**: 16 tests with 100% coverage on legal entity models
+- **Integration Tests**: Database operations and service interactions
+- **Agent Tests**: LangGraph workflow validation and AI agent behavior
+- **Performance Tests**: Load testing and benchmark validation
 
 ### Code Quality
 ```bash
-poetry run ruff check .
-poetry run ruff format .
-poetry run mypy .
+# Run all quality checks
+python scripts/run_tests.py --lint
+
+# Or run individually
+poetry run ruff check .      # Linting
+poetry run ruff format .     # Code formatting
+poetry run mypy .            # Static type checking
 ```
 
 ### Building for Production

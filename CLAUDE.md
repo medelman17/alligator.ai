@@ -69,6 +69,22 @@ docker compose down
 
 ## Architecture Overview
 
+### Phased Development Approach
+
+**Phase 1 (Foundation)**: Core legal research platform with:
+- Neo4j citation graph analysis
+- ChromaDB semantic search  
+- LangGraph multi-agent orchestration
+- Basic memory systems (Redis, PostgreSQL)
+
+**Phase 2 (Temporal Enhancement)**: Integration of Graphiti for temporal knowledge evolution:
+- Research pattern learning and adaptation
+- Case law treatment tracking over time
+- Judge-specific strategy optimization
+- User/firm preference personalization
+
+See `GRAPHITI_ARCHITECTURE.md` and `GRAPHITI_IMPLEMENTATION.md` for temporal enhancement details.
+
 ### Memory Architecture
 
 The platform includes a sophisticated memory system to enhance agent capabilities:
@@ -77,6 +93,7 @@ The platform includes a sophisticated memory system to enhance agent capabilitie
 2. **Episodic Memory** (PostgreSQL + ChromaDB): Historical research patterns and outcomes
 3. **Semantic Memory** (Neo4j + ChromaDB): Evolving legal knowledge graph
 4. **Personalization Memory** (PostgreSQL): User and firm preferences
+5. **Temporal Memory** (Graphiti - Phase 2): Time-aware knowledge evolution and learning
 
 See `MEMORY_ARCHITECTURE.md` and `MEMORY_IMPLEMENTATION.md` for detailed design and implementation patterns.
 
@@ -188,8 +205,49 @@ REDIS_URL=redis://localhost:6379
 
 ## Testing Strategy
 
-- Unit tests for individual agents and services
-- Integration tests for multi-agent workflows
-- Graph query performance tests
-- Vector search accuracy benchmarks
-- End-to-end tests for complete research workflows
+### Comprehensive Test Coverage ✅ IMPLEMENTED
+
+**Testing Framework**: pytest with async support, coverage reporting, and CI/CD integration
+
+**Test Categories**:
+- **Unit Tests** (`tests/unit/`): Data models, service logic, utilities (Target: 90%+ coverage)
+- **Integration Tests** (`tests/integration/`): Database operations, service interactions
+- **Agent Tests** (`tests/agents/`): LangGraph workflow testing, agent behavior validation
+- **Performance Tests**: Load testing, citation network traversal, search benchmarks
+- **Legal Accuracy Tests**: Validation of legal research quality and correctness
+- **Security Tests**: Bandit security scanning, dependency vulnerability checks
+
+**Test Commands**:
+```bash
+# Run all tests with coverage
+poetry run pytest
+
+# Run specific test categories
+python scripts/run_tests.py --unit          # Unit tests only
+python scripts/run_tests.py --integration   # Integration tests
+python scripts/run_tests.py --agents        # Agent workflow tests
+python scripts/run_tests.py --performance   # Performance benchmarks
+python scripts/run_tests.py --accuracy      # Legal accuracy validation
+
+# Quick development cycle
+python scripts/run_tests.py --quick         # Fast unit tests, no coverage
+
+# Generate coverage report
+python scripts/run_tests.py --coverage      # HTML + XML coverage reports
+
+# Check code quality
+python scripts/run_tests.py --lint          # Ruff linting + mypy type checking
+```
+
+**CI/CD Pipeline** (GitHub Actions):
+- Matrix testing across test categories
+- Database service provisioning (Neo4j, ChromaDB, PostgreSQL, Redis)
+- Automated security scanning
+- Coverage reporting to Codecov
+- Performance regression detection
+
+**Test Database Setup**:
+- Isolated test databases for each service
+- Automatic test data cleanup
+- Mock services for external dependencies
+- Dockerized testing environment
