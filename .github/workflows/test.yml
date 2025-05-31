@@ -65,10 +65,11 @@ jobs:
         env:
           PERSIST_DIRECTORY: /chroma/data
         options: >-
-          --health-cmd "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/heartbeat')\""
+          --health-cmd "wget --no-verbose --tries=1 --spider http://localhost:8000/api/v2/heartbeat || exit 1"
           --health-interval 30s
           --health-timeout 10s
-          --health-retries 10
+          --health-retries 5
+          --health-start-period 40s
         ports:
           - 8000:8000
           
@@ -132,7 +133,7 @@ jobs:
         
         # Wait for ChromaDB (max 2 minutes)
         timeout=120
-        while ! curl -f http://localhost:8000/api/v1/heartbeat >/dev/null 2>&1; do
+        while ! curl -f http://localhost:8000/api/v2/heartbeat >/dev/null 2>&1; do
           echo "Waiting for ChromaDB..."
           sleep 3
           timeout=$((timeout - 3))
@@ -252,10 +253,11 @@ jobs:
         env:
           PERSIST_DIRECTORY: /chroma/data
         options: >-
-          --health-cmd "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/heartbeat')\""
+          --health-cmd "wget --no-verbose --tries=1 --spider http://localhost:8000/api/v2/heartbeat || exit 1"
           --health-interval 30s
           --health-timeout 10s
-          --health-retries 10
+          --health-retries 5
+          --health-start-period 40s
         ports:
           - 8000:8000
           
@@ -326,10 +328,11 @@ jobs:
         env:
           PERSIST_DIRECTORY: /chroma/data
         options: >-
-          --health-cmd "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/heartbeat')\""
+          --health-cmd "wget --no-verbose --tries=1 --spider http://localhost:8000/api/v2/heartbeat || exit 1"
           --health-interval 30s
           --health-timeout 10s
-          --health-retries 10
+          --health-retries 5
+          --health-start-period 40s
         ports:
           - 8000:8000
           
