@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   neo4j:
     image: neo4j:5-community
@@ -36,7 +34,9 @@ services:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
       interval: 30s
       timeout: 10s
-      retries: 5
+      retries: 3
+      start_period: 40s
+      disable: true
 
   postgres:
     image: postgres:16-alpine
@@ -64,7 +64,7 @@ services:
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      test: ["CMD", "redis-cli", "-a", "citation_redis_2024", "ping"]
       interval: 30s
       timeout: 10s
       retries: 5
