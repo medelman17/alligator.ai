@@ -64,6 +64,11 @@ jobs:
         image: chromadb/chroma:latest
         env:
           PERSIST_DIRECTORY: /chroma/data
+        options: >-
+          --health-cmd "curl -f http://localhost:8000/api/v1/heartbeat || exit 1"
+          --health-interval 30s
+          --health-timeout 10s
+          --health-retries 10
         ports:
           - 8000:8000
           
@@ -99,23 +104,44 @@ jobs:
       
     - name: Wait for services to be ready
       run: |
-        # Wait for PostgreSQL
-        until pg_isready -h localhost -p 5432 -U citation_user; do
+        # Wait for PostgreSQL (max 2 minutes)
+        timeout=120
+        while ! pg_isready -h localhost -p 5432 -U citation_user >/dev/null 2>&1; do
           echo "Waiting for PostgreSQL..."
           sleep 2
+          timeout=$((timeout - 2))
+          if [ $timeout -le 0 ]; then
+            echo "PostgreSQL failed to start within 2 minutes"
+            exit 1
+          fi
         done
+        echo "PostgreSQL is ready"
         
-        # Wait for Neo4j
-        until curl -f http://localhost:7474; do
+        # Wait for Neo4j (max 3 minutes)
+        timeout=180
+        while ! curl -f http://localhost:7474 >/dev/null 2>&1; do
           echo "Waiting for Neo4j..."
           sleep 5
+          timeout=$((timeout - 5))
+          if [ $timeout -le 0 ]; then
+            echo "Neo4j failed to start within 3 minutes"
+            exit 1
+          fi
         done
+        echo "Neo4j is ready"
         
-        # Wait for ChromaDB
-        until curl -f http://localhost:8000/api/v1/heartbeat; do
+        # Wait for ChromaDB (max 2 minutes)
+        timeout=120
+        while ! curl -f http://localhost:8000/api/v1/heartbeat >/dev/null 2>&1; do
           echo "Waiting for ChromaDB..."
-          sleep 2
+          sleep 3
+          timeout=$((timeout - 3))
+          if [ $timeout -le 0 ]; then
+            echo "ChromaDB failed to start within 2 minutes"
+            exit 1
+          fi
         done
+        echo "ChromaDB is ready"
         
         echo "All services are ready!"
         
@@ -223,6 +249,13 @@ jobs:
           
       chromadb:
         image: chromadb/chroma:latest
+        env:
+          PERSIST_DIRECTORY: /chroma/data
+        options: >-
+          --health-cmd "curl -f http://localhost:8000/api/v1/heartbeat || exit 1"
+          --health-interval 30s
+          --health-timeout 10s
+          --health-retries 10
         ports:
           - 8000:8000
           
@@ -290,6 +323,13 @@ jobs:
           
       chromadb:
         image: chromadb/chroma:latest
+        env:
+          PERSIST_DIRECTORY: /chroma/data
+        options: >-
+          --health-cmd "curl -f http://localhost:8000/api/v1/heartbeat || exit 1"
+          --health-interval 30s
+          --health-timeout 10s
+          --health-retries 10
         ports:
           - 8000:8000
           
@@ -339,10 +379,23 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
       
-    - name: Run Bandit security linter
-      uses: securecodewarrior/github-action-bandit@v1
+    - name: Set up Python
+      uses: actions/setup-python@v4
       with:
-        path: "shared services api mcp_server"
+        python-version: ${{ env.PYTHON_VERSION }}
+        
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+      with:
+        version: ${{ env.POETRY_VERSION }}
+        
+    - name: Install dependencies
+      run: poetry install --no-interaction
+      
+    - name: Run Bandit security linter
+      run: |
+        poetry run bandit -r shared services api mcp_server -f json -o bandit-report.json || true
+        poetry run bandit -r shared services api mcp_server
         
     - name: Run safety check
       run: |
