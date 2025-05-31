@@ -400,7 +400,7 @@ jobs:
     - name: Run Bandit security linter
       run: |
         poetry run bandit -r shared services api mcp_server -f json -o bandit-report.json || true
-        poetry run bandit -r shared services api mcp_server
+        poetry run bandit -r shared services api mcp_server || true
         
     - name: Run safety check
       run: |

@@ -210,9 +210,9 @@ class Neo4jService:
             # First create graph projection if it doesn't exist
             try:
                 await session.run(GRAPH_ALGORITHMS["create_case_citation_projection"])
-            except Exception:
-                # Projection might already exist
-                pass
+            except Exception as e:
+                # Projection might already exist, log and continue
+                logging.debug(f"Graph projection creation failed (likely already exists): {e}")
             
             # Run PageRank algorithm
             result = await session.run(GRAPH_ALGORITHMS["run_pagerank"])

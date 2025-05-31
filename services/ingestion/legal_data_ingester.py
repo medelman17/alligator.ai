@@ -494,8 +494,9 @@ class LegalDataIngester:
                 else:
                     date = case_data["decision_date"]
                 year = str(date.year)
-            except:
-                pass
+            except (KeyError, TypeError, AttributeError) as e:
+                logging.debug(f"Could not extract year from case data: {e}")
+                year = None
         
         # Create slug from case name
         slug = re.sub(r'[^a-zA-Z0-9\s-]', '', case_name.lower())

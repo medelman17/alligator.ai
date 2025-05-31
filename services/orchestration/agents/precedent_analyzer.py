@@ -415,8 +415,9 @@ class PrecedentAnalyzer:
                         years_ago = (datetime.now(timezone.utc) - decision_dt).days / 365
                         if years_ago <= 5:
                             treatment_analysis["recent_developments"].append(precedent)
-                    except:
-                        pass
+                    except (ValueError, TypeError) as e:
+                        logging.debug(f"Could not parse decision date for treatment analysis: {e}")
+                        continue
             
             # Generate trend analysis
             if treatment_analysis["recent_developments"]:
