@@ -89,19 +89,25 @@ class CourtListenerClient:
     - Intelligent rate limiting and quality gates
     """
     
-    BASE_URL = "https://www.courtlistener.com/api/rest/v3/"
+    BASE_URL = "https://www.courtlistener.com/api/rest/v4/"
     
-    def __init__(self, api_token: str, timeout: int = 30):
+    def __init__(self, api_token: Optional[str] = None, timeout: int = 30):
         self.api_token = api_token
         self.timeout = timeout
         self.rate_limit = RateLimitInfo()
+        # Build headers
+        headers = {
+            "User-Agent": "alligator.ai-legal-research/1.0",
+            "Accept": "application/json"
+        }
+        
+        # Add auth token if provided
+        if api_token:
+            headers["Authorization"] = f"Token {api_token}"
+        
         self.client = httpx.AsyncClient(
             base_url=self.BASE_URL,
-            headers={
-                "Authorization": f"Token {api_token}",
-                "User-Agent": "alligator.ai-legal-research/1.0",
-                "Accept": "application/json"
-            },
+            headers=headers,
             timeout=timeout
         )
         
@@ -115,7 +121,8 @@ class CourtListenerClient:
             court.value: court for court in NewJerseyCourtType
         }
         
-        logger.info("CourtListener client initialized for New Jersey jurisdiction")
+        auth_type = "authenticated" if api_token else "anonymous (rate-limited)"
+        logger.info(f"CourtListener client initialized for New Jersey jurisdiction ({auth_type})")
     
     async def close(self):
         """Clean up HTTP client."""

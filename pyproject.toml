@@ -12,7 +12,7 @@ packages = [
 ]
 
 [tool.poetry.dependencies]
-python = "^3.11"
+python = ">=3.11,<3.13"
 fastapi = "^0.104.1"
 uvicorn = {extras = ["standard"], version = "^0.24.0"}
 pydantic = {extras = ["email"], version = "^2.11.5"}
@@ -32,6 +32,7 @@ python-jose = {extras = ["cryptography"], version = "^3.3.0"}
 passlib = {extras = ["bcrypt"], version = "^1.7.4"}
 python-multipart = "^0.0.6"
 tenacity = "^8.2.3"
+spacy = ">=3.6,<3.8"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.3"

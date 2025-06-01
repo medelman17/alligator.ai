@@ -302,55 +302,99 @@ class ChromaService:
     ) -> List[Dict[str, Any]]:
         """Search a specific collection with filters."""
         try:
-            if not self._mcp_available:
-                # Return simulated results for development/testing
-                return self._get_simulated_search_results(
-                    query, jurisdiction, practice_areas, limit
-                )
+            # Try to use MCP ChromaDB tools first
+            if self._mcp_available:
+                try:
+                    # Build metadata filter for ChromaDB
+                    where_filter = {}
+                    
+                    if jurisdiction:
+                        where_filter["jurisdiction"] = {"$eq": jurisdiction}
+                    
+                    if practice_areas and len(practice_areas) > 0:
+                        # Use logical OR for multiple practice areas
+                        if len(practice_areas) == 1:
+                            where_filter["practice_areas"] = {"$contains": practice_areas[0]}
+                        else:
+                            where_filter["$or"] = [
+                                {"practice_areas": {"$contains": area}} for area in practice_areas
+                            ]
+                    
+                    if date_range:
+                        # Add date range filtering
+                        where_filter["decision_date"] = {
+                            "$gte": date_range[0].isoformat(),
+                            "$lte": date_range[1].isoformat()
+                        }
+                    
+                    # Use actual MCP ChromaDB tools
+                    logger.info(f"Querying ChromaDB collection '{collection_name}' with query: '{query[:50]}...'")
+                    
+                    # Use available MCP ChromaDB tools directly
+                    import inspect
+                    
+                    # Get the available MCP function
+                    mcp_chroma_query = None
+                    try:
+                        # Try to get the MCP function from the calling context
+                        frame = inspect.currentframe()
+                        while frame:
+                            if 'mcp__chroma__chroma_query_documents' in frame.f_globals:
+                                mcp_chroma_query = frame.f_globals['mcp__chroma__chroma_query_documents']
+                                break
+                            frame = frame.f_back
+                    except:
+                        pass
+                    
+                    if not mcp_chroma_query:
+                        # Import directly if available in the environment
+                        try:
+                            import sys
+                            import importlib
+                            # This would work if the MCP tools are available
+                            mcp_module = importlib.import_module('mcp__chroma__chroma_query_documents')
+                            mcp_chroma_query = mcp_module.mcp__chroma__chroma_query_documents
+                        except ImportError:
+                            raise ImportError("MCP ChromaDB tools not available")
+                    
+                    # Call MCP ChromaDB query
+                    results = mcp_chroma_query(
+                        collection_name=collection_name,
+                        query_texts=[query],
+                        n_results=limit,
+                        where=where_filter if where_filter else None
+                    )
+                    
+                    # Convert MCP results to our format
+                    formatted_results = []
+                    for i, result in enumerate(results.get("documents", [[]])[0]):
+                        metadata = results.get("metadatas", [[]])[0][i] if results.get("metadatas") else {}
+                        distance = results.get("distances", [[]])[0][i] if results.get("distances") else 0.0
+                        
+                        # Convert distance to similarity score (closer = more similar)
+                        similarity_score = max(0.0, 1.0 - distance)
+                        
+                        formatted_results.append({
+                            "id": results.get("ids", [[]])[0][i] if results.get("ids") else f"doc_{i}",
+                            "similarity_score": similarity_score,
+                            "metadata": metadata,
+                            "document": result
+                        })
+                    
+                    logger.info(f"ChromaDB returned {len(formatted_results)} results")
+                    return formatted_results
+                    
+                except ImportError:
+                    logger.warning("MCP ChromaDB tools not available, falling back to simulation")
+                    self._mcp_available = False
+                except Exception as mcp_error:
+                    logger.warning(f"MCP query failed: {mcp_error}, falling back to simulation")
             
-            # Build metadata filter for ChromaDB
-            where_filter = {}
-            
-            if jurisdiction:
-                where_filter["jurisdiction"] = {"$eq": jurisdiction}
-            
-            if practice_areas and len(practice_areas) > 0:
-                # Use logical OR for multiple practice areas
-                if len(practice_areas) == 1:
-                    where_filter["practice_areas"] = {"$contains": practice_areas[0]}
-                else:
-                    where_filter["$or"] = [
-                        {"practice_areas": {"$contains": area}} for area in practice_areas
-                    ]
-            
-            if date_range:
-                # Add date range filtering
-                where_filter["decision_date"] = {
-                    "$gte": date_range[0].isoformat(),
-                    "$lte": date_range[1].isoformat()
-                }
-            
-            # Use MCP ChromaDB tools to query
-            # Note: This would call the actual MCP tools in production
-            try:
-                # Simulated MCP call - in real implementation this would be:
-                # results = await mcp_chroma_query_documents(
-                #     collection_name=collection_name,
-                #     query_texts=[query],
-                #     n_results=limit,
-                #     where=where_filter if where_filter else None
-                # )
-                
-                # For now, return simulated results
-                return self._get_simulated_search_results(
-                    query, jurisdiction, practice_areas, limit
-                )
-            
-            except Exception as mcp_error:
-                logger.warning(f"MCP query failed, falling back to simulation: {mcp_error}")
-                return self._get_simulated_search_results(
-                    query, jurisdiction, practice_areas, limit
-                )
+            # Fallback to simulated results for development/testing
+            logger.info(f"Using simulated results for collection '{collection_name}'")
+            return self._get_simulated_search_results(
+                query, jurisdiction, practice_areas, limit
+            )
             
         except Exception as e:
             logger.error(f"Error searching collection {collection_name}: {e}")

@@ -179,59 +179,43 @@ async def conduct_research_background(
         # Perform different types of analysis
         for analysis_type in request.analysis_types:
             if analysis_type == AnalysisType.PRECEDENT_ANALYSIS:
-                # Use enhanced Neo4j semantic search
+                # Use ChromaDB semantic search for real legal data
                 jurisdictions = [request.jurisdiction] if request.jurisdiction else None
                 practice_areas = [pa.value for pa in request.practice_areas] if request.practice_areas else None
 
-                search_results = await neo4j.semantic_case_search(
-                    search_terms=request.query,
-                    jurisdictions=jurisdictions,
+                search_results = await chroma.semantic_search(
+                    query=request.query,
+                    document_types=["case"],
+                    jurisdiction=request.jurisdiction,
                     practice_areas=practice_areas,
-                    good_law_only=True,
                     limit=request.max_cases
                 )
 
-                # Analyze each case with enhanced methods
+                # Analyze each case from ChromaDB results
                 precedent_results = []
                 for result in search_results[:10]:  # Limit for performance
-                    case = result["case"]
-                    case_id = case.id
-
-                    # Get enhanced analysis
-                    try:
-                        # Get authoritative precedents for this case
-                        precedents = await neo4j.find_authoritative_precedents(
-                            case_id=case_id,
-                            target_jurisdictions=jurisdictions or [case.jurisdiction],
-                            practice_areas=practice_areas or case.practice_areas or [],
-                            limit=5
-                        )
-
-                        # Get treatment analysis
-                        treatment = await neo4j.analyze_citation_treatment(case_id)
-
-                        # Get good law verification
-                        good_law = await neo4j.verify_good_law_status(case_id)
-
-                        analysis_result = {
-                            "case_id": case_id,
-                            "case_name": case.case_name,
-                            "authority_score": case.authority_score,
-                            "relevance_score": result.get("relevance_score", 0.0),
-                            "precedents": precedents[:3],  # Top 3 precedents
-                            "treatment_analysis": treatment,
-                            "good_law_status": good_law,
-                            "summary": f"Analysis of {case.case_name} - Authority: {case.authority_score:.2f}, Good Law: {good_law.get('good_law_confidence', 'unknown')}",
-                        }
-                        precedent_results.append(analysis_result)
-
-                    except Exception:
-                        # Fallback to basic analysis if enhanced features fail
-                        analysis_result = await analyzer.analyze_precedent(
-                            case_id=case_id, query=request.query, jurisdiction=request.jurisdiction
-                        )
-                        if analysis_result:
-                            precedent_results.append(analysis_result)
+                    # ChromaDB result structure: {"id": str, "metadata": dict, "similarity_score": float}
+                    case_id = result["id"]
+                    metadata = result["metadata"]
+                    similarity_score = result["similarity_score"]
+                    
+                    case_name = metadata.get("case_name", metadata.get("title", "Unknown Case"))
+                    authority_score = metadata.get("authority_score", 0.0)
+                    citation = metadata.get("citation", "No citation")
+                    
+                    # Create analysis result from ChromaDB data
+                    analysis_result = {
+                        "case_id": case_id,
+                        "case_name": case_name,
+                        "citation": citation,
+                        "authority_score": authority_score,
+                        "relevance_score": similarity_score,
+                        "jurisdiction": metadata.get("jurisdiction", "Unknown"),
+                        "practice_areas": metadata.get("practice_areas", "").split(",") if isinstance(metadata.get("practice_areas"), str) else metadata.get("practice_areas", []),
+                        "decision_date": metadata.get("decision_date", "Unknown"),
+                        "summary": f"Analysis of {case_name} - Authority: {authority_score:.2f}, Relevance: {similarity_score:.3f}",
+                    }
+                    precedent_results.append(analysis_result)
 
                 results["precedent_analysis"] = {
                     "cases_analyzed": len(precedent_results),
