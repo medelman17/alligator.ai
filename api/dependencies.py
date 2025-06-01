@@ -11,14 +11,14 @@ from typing import Optional
 
 from api.auth.dependencies import AuthDependencies
 from api.auth.service import AuthService
-from services.graph.neo4j_service import Neo4jService
+from services.graph.enhanced_neo4j_service import EnhancedNeo4jService
 from services.orchestration.agents.precedent_analyzer import PrecedentAnalyzer
 from services.vector.chroma_service import ChromaService
 
 logger = logging.getLogger(__name__)
 
 # Global service instances (will be initialized at startup)
-_neo4j_service: Optional[Neo4jService] = None
+_neo4j_service: Optional[EnhancedNeo4jService] = None
 _chroma_service: Optional[ChromaService] = None
 _precedent_analyzer: Optional[PrecedentAnalyzer] = None
 _auth_service: Optional[AuthService] = None
@@ -29,7 +29,7 @@ class ServiceManager:
     """Manages service lifecycle and configuration."""
 
     def __init__(self):
-        self.neo4j_service: Optional[Neo4jService] = None
+        self.neo4j_service: Optional[EnhancedNeo4jService] = None
         self.chroma_service: Optional[ChromaService] = None
         self.precedent_analyzer: Optional[PrecedentAnalyzer] = None
         self.auth_service: Optional[AuthService] = None
@@ -70,7 +70,7 @@ class ServiceManager:
             neo4j_user = os.getenv("NEO4J_USER", "neo4j")
             neo4j_password = os.getenv("NEO4J_PASSWORD", "citation_graph_2024")
 
-            self.neo4j_service = Neo4jService(
+            self.neo4j_service = EnhancedNeo4jService(
                 uri=neo4j_uri, user=neo4j_user, password=neo4j_password
             )
 
@@ -332,7 +332,7 @@ class MockPrecedentAnalyzer:
 
 
 # Dependency functions for FastAPI
-async def get_neo4j_service() -> Neo4jService:
+async def get_neo4j_service() -> EnhancedNeo4jService:
     """Get Neo4j service instance."""
     if not service_manager._initialized:
         await service_manager.initialize()

@@ -542,15 +542,8 @@ class EnhancedNeo4jService:
         """Convert Neo4j record to Case object with enhanced fields."""
         data = dict(record_data)
         
-        # Convert ISO strings back to datetime objects
-        for field in ['decision_date', 'filing_date', 'created_at', 'updated_at']:
-            if field in data and data[field]:
-                if isinstance(data[field], str):
-                    try:
-                        data[field] = datetime.fromisoformat(data[field].replace('Z', '+00:00'))
-                    except (ValueError, AttributeError):
-                        # Handle malformed dates gracefully
-                        data[field] = None
+        # Use the comprehensive temporal conversion function
+        data = self._convert_neo4j_temporals(data)
         
         # Handle enhanced fields that might not exist in basic Case model
         enhanced_fields = ['good_law_status', 'landmark_case', 'doctrine_tags', 'legal_issues']
@@ -642,6 +635,135 @@ class EnhancedNeo4jService:
             )
             record = await result.single()
             return float(record["score"]) if record else 0.0
+    
+    async def get_citing_cases(self, case_id: str, limit: int = 50) -> List[Tuple[Case, Citation]]:
+        """Get cases that cite the given case (for precedent analyzer compatibility)."""
+        async with self.driver.session() as session:
+            result = await session.run(
+                """
+                MATCH (citing:Case)-[r:CITES]->(cited:Case {id: $case_id})
+                RETURN citing, r, cited
+                ORDER BY citing.decision_date DESC, citing.authority_score DESC
+                LIMIT $limit
+                """,
+                case_id=case_id,
+                limit=limit
+            )
+            records = await result.data()
+            
+            results = []
+            for record in records:
+                citing_case = self._record_to_case(record["citing"])
+                citation_rel = self._record_to_citation(record["r"])
+                # Set the proper case IDs for the citation
+                citation_rel.citing_case_id = citing_case.id
+                citation_rel.cited_case_id = case_id
+                results.append((citing_case, citation_rel))
+            
+            return results
+    
+    async def get_cited_cases(self, case_id: str, limit: int = 50) -> List[Tuple[Case, Citation]]:
+        """Get cases cited by the given case (for precedent analyzer compatibility)."""
+        async with self.driver.session() as session:
+            result = await session.run(
+                """
+                MATCH (citing:Case {id: $case_id})-[r:CITES]->(cited:Case)
+                RETURN citing, r, cited
+                ORDER BY cited.decision_date DESC, cited.authority_score DESC
+                LIMIT $limit
+                """,
+                case_id=case_id,
+                limit=limit
+            )
+            records = await result.data()
+            
+            results = []
+            for record in records:
+                cited_case = self._record_to_case(record["cited"])
+                citation_rel = self._record_to_citation(record["r"])
+                # Set the proper case IDs for the citation
+                citation_rel.citing_case_id = case_id
+                citation_rel.cited_case_id = cited_case.id
+                results.append((cited_case, citation_rel))
+            
+            return results
+    
+    def _record_to_citation(self, record_data) -> Citation:
+        """Convert Neo4j record to Citation object (for precedent analyzer compatibility)."""
+        # Handle different types of Neo4j objects safely
+        try:
+            if hasattr(record_data, '_properties'):
+                # Neo4j Relationship object
+                data = dict(record_data._properties)
+            elif hasattr(record_data, 'items'):
+                # Dictionary-like object
+                data = dict(record_data)
+            else:
+                # Try to convert to dict
+                data = dict(record_data)
+        except (TypeError, ValueError):
+            # If all else fails, create minimal data
+            data = {}
+        
+        # Use the temporal conversion function
+        data = self._convert_neo4j_temporals(data)
+        
+        # Create a basic citation object with core fields
+        citation_data = {}
+        
+        # Generate ID if not present
+        if 'id' not in data:
+            citation_data['id'] = f"citation-{hash(str(data))}"
+        else:
+            citation_data['id'] = data['id']
+        
+        # Map treatment
+        if 'treatment' in data:
+            citation_data['treatment'] = data['treatment']
+        else:
+            citation_data['treatment'] = 'cites'
+        
+        # Map strength
+        if 'strength' in data:
+            citation_data['strength'] = float(data['strength'])
+        else:
+            citation_data['strength'] = 1.0
+        
+        # Map other fields if they exist
+        if 'context' in data:
+            citation_data['context'] = data['context']
+        elif 'legal_context' in data:
+            citation_data['context'] = data['legal_context']
+        
+        if 'page_references' in data:
+            page_refs = data['page_references']
+            if isinstance(page_refs, list):
+                citation_data['page_references'] = page_refs
+            else:
+                citation_data['page_references'] = [str(page_refs)]
+        
+        if 'created_at' in data:
+            citation_data['created_at'] = data['created_at']
+        
+        if 'updated_at' in data:
+            citation_data['updated_at'] = data['updated_at']
+        
+        # These will need to be set by the calling method
+        citation_data['citing_case_id'] = 'unknown'
+        citation_data['cited_case_id'] = 'unknown'
+        
+        try:
+            return Citation(**citation_data)
+        except Exception as e:
+            logger.warning(f"Failed to create Citation object: {e}")
+            # Return a minimal citation object
+            return Citation(
+                id=citation_data.get('id', 'unknown'),
+                citing_case_id='unknown',
+                cited_case_id='unknown',
+                treatment=citation_data.get('treatment', 'cites'),
+                strength=citation_data.get('strength', 1.0)
+            )
 
 
 # Example usage demonstrating enhanced capabilities

@@ -13,7 +13,7 @@ from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 from langchain_anthropic import ChatAnthropic
 
 from shared.models.legal_entities import Case, Citation, PracticeArea
-from services.graph.neo4j_service import Neo4jService
+from services.graph.enhanced_neo4j_service import EnhancedNeo4jService
 from services.vector.chroma_service import ChromaService
 
 logger = logging.getLogger(__name__)
@@ -50,7 +50,7 @@ class PrecedentAnalyzer:
     
     def __init__(
         self,
-        neo4j_service: Neo4jService,
+        neo4j_service: EnhancedNeo4jService,
         chroma_service: ChromaService,
         anthropic_api_key: str
     ):
@@ -78,7 +78,6 @@ class PrecedentAnalyzer:
         workflow.add_node("analyze_authority", self._analyze_authority)
         workflow.add_node("analyze_treatment", self._analyze_treatment)
         workflow.add_node("generate_memo", self._generate_memo)
-        workflow.add_node("error_handler", self._handle_error)
         
         # Define the workflow edges
         workflow.set_entry_point("initialize")
@@ -91,7 +90,6 @@ class PrecedentAnalyzer:
         workflow.add_edge("analyze_treatment", "generate_memo")
         
         workflow.add_edge("generate_memo", END)
-        workflow.add_edge("error_handler", END)
         
         return workflow.compile()
     
@@ -575,27 +573,16 @@ class PrecedentAnalyzer:
         score += good_law_ratio * 0.2
         
         return min(score, 1.0)
-    
-    async def _handle_error(self, state: PrecedentAnalysisState) -> PrecedentAnalysisState:
-        """Handle errors in the workflow."""
-        error_msg = state.get("error_message", "Unknown error occurred")
-        
-        state["precedent_memo"] = f"Analysis could not be completed due to error: {error_msg}"
-        state["confidence_score"] = 0.0
-        
-        logger.error(f"Precedent analysis failed: {error_msg}")
-        
-        return state
 
 
 # Example usage
 async def example_usage():
     """Example of using the precedent analyzer."""
-    from services.graph.neo4j_service import Neo4jService
+    from services.graph.enhanced_neo4j_service import EnhancedNeo4jService
     from services.vector.chroma_service import ChromaService
     
     # Initialize services
-    neo4j_service = Neo4jService("bolt://localhost:7687", "neo4j", "citation_graph_2024")
+    neo4j_service = EnhancedNeo4jService("bolt://localhost:7687", "neo4j", "citation_graph_2024")
     chroma_service = ChromaService()
     
     # Initialize analyzer
