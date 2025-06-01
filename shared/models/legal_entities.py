@@ -42,11 +42,19 @@ class PracticeArea(str, Enum):
     CIVIL_RIGHTS = "civil_rights"
     EMPLOYMENT = "employment"
     CONSTITUTIONAL = "constitutional"
+    CONSTITUTIONAL_LAW = "constitutional_law"  # Added for compatibility
     CRIMINAL = "criminal"
+    CRIMINAL_LAW = "criminal_law"  # Added for compatibility
     CORPORATE = "corporate"
     INTELLECTUAL_PROPERTY = "intellectual_property"
     LITIGATION = "litigation"
     REGULATORY = "regulatory"
+    EDUCATION = "education"  # Added for compatibility
+    PRIVACY_RIGHTS = "privacy_rights"  # Added for compatibility
+    REPRODUCTIVE_RIGHTS = "reproductive_rights"  # Added for compatibility
+    FEDERALISM = "federalism"  # Added for compatibility
+    PROCEDURE = "procedure"  # Added for compatibility
+    TRANSPORTATION = "transportation"  # Added for compatibility
 
 
 class Case(BaseModel):

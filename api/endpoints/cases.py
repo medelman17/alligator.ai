@@ -112,26 +112,33 @@ async def get_case(
         response = CaseResponse(case=case)
 
         if include_stats:
-            # Get enhanced authority score
-            response.authority_score = await neo4j.calculate_authority_score(case_id)
-
-            # Get citation counts
-            citing_cases = await neo4j.get_citing_cases(case_id, limit=1000)
-            cited_cases = await neo4j.get_cited_cases(case_id, limit=1000)
-
-            response.citing_count = len(citing_cases)
-            response.citation_count = len(cited_cases)
-            response.related_cases_count = response.citing_count + response.citation_count
-
-            # Get enhanced legal analysis if available
             try:
-                response.good_law_verification = await neo4j.verify_good_law_status(case_id)
-                response.treatment_analysis = await neo4j.analyze_citation_treatment(case_id)
+                # Get enhanced authority score
+                response.authority_score = await neo4j.calculate_authority_score(case_id)
+
+                # Get citation counts
+                citing_cases = await neo4j.get_citing_cases(case_id, limit=1000)
+                cited_cases = await neo4j.get_cited_cases(case_id, limit=1000)
+
+                response.citing_count = len(citing_cases)
+                response.citation_count = len(cited_cases)
+                response.related_cases_count = response.citing_count + response.citation_count
+
+                # Get enhanced legal analysis if available
+                try:
+                    response.good_law_verification = await neo4j.verify_good_law_status(case_id)
+                    response.treatment_analysis = await neo4j.analyze_citation_treatment(case_id)
+                except Exception as e:
+                    # Enhanced features may not be available in basic schema
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.debug(f"Enhanced analysis unavailable for {case_id}: {e}")
             except Exception as e:
-                # Enhanced features may not be available in basic schema
+                # If stats collection fails, log but don't fail the whole request
                 import logging
                 logger = logging.getLogger(__name__)
-                logger.debug(f"Enhanced analysis unavailable for {case_id}: {e}")
+                logger.error(f"Stats collection failed for {case_id}: {e}")
+                response.authority_score = None
 
         return response
 

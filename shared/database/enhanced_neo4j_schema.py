@@ -10,7 +10,7 @@ This module extends the basic schema with legal domain-specific features:
 
 from typing import Dict, List, Optional
 from datetime import datetime, date
-from neo4j import GraphDatabase
+from neo4j import AsyncGraphDatabase
 import logging
 
 logger = logging.getLogger(__name__)
@@ -20,7 +20,7 @@ class EnhancedNeo4jSchemaManager:
     """Enhanced Neo4j schema manager for legal research workflows."""
     
     def __init__(self, uri: str, user: str, password: str):
-        self.driver = GraphDatabase.driver(uri, auth=(user, password))
+        self.driver = AsyncGraphDatabase.driver(uri, auth=(user, password))
     
     async def create_enhanced_schema(self):
         """Create comprehensive Neo4j schema for legal research."""
@@ -218,30 +218,46 @@ class EnhancedNeo4jSchemaManager:
     async def _create_citation_treatment_system(self, session):
         """Set up sophisticated citation treatment classification."""
         treatment_setup = """
-        // Create citation treatment reference data
-        MERGE (treatments:CitationTreatments {
-            positive_treatments: [
-                {type: 'follows', weight: 1.0, description: 'Directly follows precedent'},
-                {type: 'affirmed', weight: 1.0, description: 'Appellate affirmance'},
-                {type: 'explained', weight: 0.8, description: 'Clarifies holding'},
-                {type: 'harmonized', weight: 0.7, description: 'Reconciles with other precedent'},
-                {type: 'expanded', weight: 0.9, description: 'Extends holding to new facts'}
-            ],
-            neutral_treatments: [
-                {type: 'cited', weight: 0.5, description: 'General citation'},
-                {type: 'discussed', weight: 0.5, description: 'Analytical discussion'},
-                {type: 'mentioned', weight: 0.3, description: 'Passing reference'},
-                {type: 'compared', weight: 0.4, description: 'Factual comparison'}
-            ],
-            negative_treatments: [
-                {type: 'distinguished', weight: -0.3, description: 'Limited to specific facts'},
-                {type: 'questioned', weight: -0.5, description: 'Casts doubt on reasoning'},
-                {type: 'criticized', weight: -0.7, description: 'Direct criticism'},
-                {type: 'limited', weight: -0.6, description: 'Scope narrowed'},
-                {type: 'overruled', weight: -1.0, description: 'Explicitly overturned'},
-                {type: 'superseded', weight: -0.9, description: 'Replaced by statute/rule'}
-            ]
-        })
+        // Create citation treatment reference nodes
+        MERGE (ct:CitationTreatmentSystem {name: 'legal_citation_treatments'})
+        
+        // Create positive treatment nodes
+        MERGE (follows:TreatmentType {type: 'follows', weight: 1.0, description: 'Directly follows precedent', category: 'positive'})
+        MERGE (affirmed:TreatmentType {type: 'affirmed', weight: 1.0, description: 'Appellate affirmance', category: 'positive'})
+        MERGE (explained:TreatmentType {type: 'explained', weight: 0.8, description: 'Clarifies holding', category: 'positive'})
+        MERGE (harmonized:TreatmentType {type: 'harmonized', weight: 0.7, description: 'Reconciles with other precedent', category: 'positive'})
+        MERGE (expanded:TreatmentType {type: 'expanded', weight: 0.9, description: 'Extends holding to new facts', category: 'positive'})
+        
+        // Create neutral treatment nodes
+        MERGE (cited:TreatmentType {type: 'cited', weight: 0.5, description: 'General citation', category: 'neutral'})
+        MERGE (discussed:TreatmentType {type: 'discussed', weight: 0.5, description: 'Analytical discussion', category: 'neutral'})
+        MERGE (mentioned:TreatmentType {type: 'mentioned', weight: 0.3, description: 'Passing reference', category: 'neutral'})
+        MERGE (compared:TreatmentType {type: 'compared', weight: 0.4, description: 'Factual comparison', category: 'neutral'})
+        
+        // Create negative treatment nodes
+        MERGE (distinguished:TreatmentType {type: 'distinguished', weight: -0.3, description: 'Limited to specific facts', category: 'negative'})
+        MERGE (questioned:TreatmentType {type: 'questioned', weight: -0.5, description: 'Casts doubt on reasoning', category: 'negative'})
+        MERGE (criticized:TreatmentType {type: 'criticized', weight: -0.7, description: 'Direct criticism', category: 'negative'})
+        MERGE (limited:TreatmentType {type: 'limited', weight: -0.6, description: 'Scope narrowed', category: 'negative'})
+        MERGE (overruled:TreatmentType {type: 'overruled', weight: -1.0, description: 'Explicitly overturned', category: 'negative'})
+        MERGE (superseded:TreatmentType {type: 'superseded', weight: -0.9, description: 'Replaced by statute/rule', category: 'negative'})
+        
+        // Link treatments to system
+        MERGE (ct)-[:HAS_TREATMENT]->(follows)
+        MERGE (ct)-[:HAS_TREATMENT]->(affirmed)
+        MERGE (ct)-[:HAS_TREATMENT]->(explained)
+        MERGE (ct)-[:HAS_TREATMENT]->(harmonized)
+        MERGE (ct)-[:HAS_TREATMENT]->(expanded)
+        MERGE (ct)-[:HAS_TREATMENT]->(cited)
+        MERGE (ct)-[:HAS_TREATMENT]->(discussed)
+        MERGE (ct)-[:HAS_TREATMENT]->(mentioned)
+        MERGE (ct)-[:HAS_TREATMENT]->(compared)
+        MERGE (ct)-[:HAS_TREATMENT]->(distinguished)
+        MERGE (ct)-[:HAS_TREATMENT]->(questioned)
+        MERGE (ct)-[:HAS_TREATMENT]->(criticized)
+        MERGE (ct)-[:HAS_TREATMENT]->(limited)
+        MERGE (ct)-[:HAS_TREATMENT]->(overruled)
+        MERGE (ct)-[:HAS_TREATMENT]->(superseded)
         """
         
         try:
@@ -297,7 +313,9 @@ class EnhancedNeo4jSchemaManager:
         MERGE (brown:Case {
             id: 'brown-v-board-1954',
             citation: '347 U.S. 483 (1954)',
-            case_name: 'Brown v. Board of Education of Topeka',
+            case_name: 'Brown v. Board of Education',
+            full_name: 'Brown v. Board of Education of Topeka',
+            court_id: 'us-supreme-court',
             decision_date: date('1954-05-17'),
             jurisdiction: 'US',
             practice_areas: ['constitutional_law', 'civil_rights', 'education'],
@@ -315,7 +333,9 @@ class EnhancedNeo4jSchemaManager:
         MERGE (plessy:Case {
             id: 'plessy-v-ferguson-1896',
             citation: '163 U.S. 537 (1896)',
-            case_name: 'Plessy v. Ferguson', 
+            case_name: 'Plessy v. Ferguson',
+            full_name: 'Plessy v. Ferguson',
+            court_id: 'us-supreme-court',
             decision_date: date('1896-05-18'),
             jurisdiction: 'US',
             practice_areas: ['constitutional_law', 'civil_rights', 'transportation'],
@@ -356,6 +376,8 @@ class EnhancedNeo4jSchemaManager:
             id: 'miranda-v-arizona-1966',
             citation: '384 U.S. 436 (1966)',
             case_name: 'Miranda v. Arizona',
+            full_name: 'Miranda v. Arizona',
+            court_id: 'us-supreme-court',
             decision_date: date('1966-06-13'),
             jurisdiction: 'US',
             practice_areas: ['criminal_law', 'constitutional_law', 'procedure'],
@@ -374,6 +396,8 @@ class EnhancedNeo4jSchemaManager:
             id: 'roe-v-wade-1973',
             citation: '410 U.S. 113 (1973)',
             case_name: 'Roe v. Wade',
+            full_name: 'Roe v. Wade',
+            court_id: 'us-supreme-court',
             decision_date: date('1973-01-22'),
             jurisdiction: 'US',
             practice_areas: ['constitutional_law', 'privacy_rights', 'reproductive_rights'],
@@ -392,6 +416,8 @@ class EnhancedNeo4jSchemaManager:
             id: 'dobbs-v-jackson-2022',
             citation: '597 U.S. ___ (2022)',
             case_name: 'Dobbs v. Jackson Women\\'s Health Organization',
+            full_name: 'Dobbs v. Jackson Women\\'s Health Organization',
+            court_id: 'us-supreme-court',
             decision_date: date('2022-06-24'),
             jurisdiction: 'US',
             practice_areas: ['constitutional_law', 'reproductive_rights', 'federalism'],
@@ -440,36 +466,47 @@ class EnhancedNeo4jSchemaManager:
     
     async def _setup_graph_projections(self, session):
         """Set up graph algorithm projections for legal analysis."""
-        projections = [
-            """
-            // Create legal authority network projection
-            CALL gds.graph.project.cypher(
-                'legal-authority-network',
-                'MATCH (c:Case) RETURN id(c) AS id, c.authority_score AS authority_score, c.decision_date AS decision_date',
-                'MATCH (c1:Case)-[r:CITES]->(c2:Case) RETURN id(c1) AS source, id(c2) AS target, r.calculated_authority AS weight, r.treatment AS treatment',
-                {validateRelationships: false}
-            )
-            """,
-            """
-            // Create citation treatment network  
-            CALL gds.graph.project.cypher(
-                'citation-treatment-network',
-                'MATCH (c:Case) RETURN id(c) AS id, c.good_law_status AS status',
-                'MATCH (c1:Case)-[r:CITES]->(c2:Case) WHERE r.treatment IN ["follows", "explained", "affirmed"] RETURN id(c1) AS source, id(c2) AS target, 1.0 AS weight'
-            )
-            """
-        ]
+        # Check if GDS library is available
+        try:
+            await session.run("CALL gds.version() YIELD gdsVersion RETURN gdsVersion")
+            gds_available = True
+        except Exception:
+            gds_available = False
+            logger.info("📊 Graph Data Science library not available, skipping advanced projections")
         
-        for projection in projections:
-            try:
-                await session.run(projection)
-                logger.info(f"✅ Created graph projection")
-            except Exception as e:
-                logger.warning(f"⚠️ Graph projection exists or error: {str(e)[:100]}...")
+        if gds_available:
+            projections = [
+                """
+                // Create legal authority network projection
+                CALL gds.graph.project.cypher(
+                    'legal-authority-network',
+                    'MATCH (c:Case) RETURN id(c) AS id, c.authority_score AS authority_score, c.decision_date AS decision_date',
+                    'MATCH (c1:Case)-[r:CITES]->(c2:Case) RETURN id(c1) AS source, id(c2) AS target, coalesce(r.calculated_authority, 1.0) AS weight, r.treatment AS treatment',
+                    {validateRelationships: false}
+                )
+                """,
+                """
+                // Create citation treatment network  
+                CALL gds.graph.project.cypher(
+                    'citation-treatment-network',
+                    'MATCH (c:Case) RETURN id(c) AS id, c.good_law_status AS status',
+                    'MATCH (c1:Case)-[r:CITES]->(c2:Case) WHERE r.treatment IN ["follows", "explained", "affirmed"] RETURN id(c1) AS source, id(c2) AS target, 1.0 AS weight'
+                )
+                """
+            ]
+            
+            for projection in projections:
+                try:
+                    await session.run(projection)
+                    logger.info(f"✅ Created graph projection")
+                except Exception as e:
+                    logger.warning(f"⚠️ Graph projection exists or error: {str(e)[:100]}...")
+        else:
+            logger.info("📊 Using basic graph queries instead of GDS projections")
     
-    def close(self):
+    async def close(self):
         """Close the database connection."""
-        self.driver.close()
+        await self.driver.close()
 
 
 # Enhanced query library for sophisticated legal research
@@ -506,40 +543,52 @@ ENHANCED_LEGAL_QUERIES = {
         MATCH (target:Case {id: $case_id})<-[citations:CITES]-(citing:Case)
         MATCH (citing)-[:DECIDED_BY]->(citing_court:Court)
         
-        WITH target, citations, citing, citing_court,
-            CASE citations.treatment
-                WHEN 'follows' THEN 1.0
-                WHEN 'explained' THEN 0.8
-                WHEN 'affirmed' THEN 1.0
-                WHEN 'distinguished' THEN -0.3
-                WHEN 'questioned' THEN -0.5
-                WHEN 'criticized' THEN -0.7
-                WHEN 'overruled' THEN -1.0
-                ELSE 0.0
-            END as treatment_impact
+        WITH target, 
+            collect({
+                treatment: citations.treatment,
+                court_weight: citing_court.base_authority_weight,
+                date: toString(citing.decision_date),
+                court: citing_court.short_name,
+                case_name: citing.case_name,
+                treatment_impact: CASE citations.treatment
+                    WHEN 'follows' THEN 1.0
+                    WHEN 'explained' THEN 0.8
+                    WHEN 'affirmed' THEN 1.0
+                    WHEN 'distinguished' THEN -0.3
+                    WHEN 'questioned' THEN -0.5
+                    WHEN 'criticized' THEN -0.7
+                    WHEN 'overruled' THEN -1.0
+                    ELSE 0.0
+                END
+            }) AS citation_data
+        
+        WITH target, citation_data,
+            size(citation_data) AS total_citations,
+            size([c IN citation_data WHERE c.treatment_impact > 0]) AS positive_citations,
+            size([c IN citation_data WHERE c.treatment_impact < 0]) AS negative_citations,
+            size([c IN citation_data WHERE c.treatment_impact = 0]) AS neutral_citations,
+            reduce(sum = 0.0, c IN citation_data | sum + c.treatment_impact * c.court_weight) AS weighted_authority_impact
         
         RETURN {
-            case: target,
-            total_citations: count(citations),
-            positive_citations: count(CASE WHEN treatment_impact > 0 THEN 1 END),
-            negative_citations: count(CASE WHEN treatment_impact < 0 THEN 1 END),
-            neutral_citations: count(CASE WHEN treatment_impact = 0 THEN 1 END),
-            weighted_authority_impact: sum(treatment_impact * citing_court.base_authority_weight),
+            case: {
+                id: target.id,
+                case_name: target.case_name,
+                citation: target.citation
+            },
+            total_citations: total_citations,
+            positive_citations: positive_citations,
+            negative_citations: negative_citations,
+            neutral_citations: neutral_citations,
+            weighted_authority_impact: weighted_authority_impact,
             good_law_confidence: 
-                CASE WHEN sum(treatment_impact * citing_court.base_authority_weight) > 0 
+                CASE WHEN weighted_authority_impact > 0 
                      THEN 'strong' 
-                     WHEN sum(treatment_impact * citing_court.base_authority_weight) < -2
+                     WHEN weighted_authority_impact < -2
                      THEN 'questionable'
                      ELSE 'moderate' 
                 END,
-            recent_citations: collect({
-                date: citing.decision_date,
-                treatment: citations.treatment,
-                court: citing_court.short_name,
-                case_name: citing.case_name
-            })[0..10]
+            recent_citations: citation_data[0..10]
         } AS treatment_analysis
-        ORDER BY citing.decision_date DESC
     """,
     
     "calculate_legal_authority_pagerank": """
@@ -576,7 +625,7 @@ ENHANCED_LEGAL_QUERIES = {
             evolution_path_length: length(r),
             doctrinal_expansions: size(expansions),
             clarifications: size(explanations),
-            time_span: duration.between(foundational.decision_date, modern.decision_date).years,
+            time_span: toInteger(duration.between(foundational.decision_date, modern.decision_date).years),
             doctrine_stability: 
                 CASE WHEN size(expansions) > size(explanations) 
                      THEN 'expanding' 
@@ -614,7 +663,7 @@ ENHANCED_LEGAL_QUERIES = {
                     WHEN positive_treatments > negative_treatments THEN 'strong'
                     ELSE 'moderate'
                 END,
-            last_verification: datetime()
+            last_verification: toString(datetime())
         } AS verification_result
     """
 }

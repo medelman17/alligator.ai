@@ -63,7 +63,8 @@
       "Bash(timeout:*)",
       "Bash(rg:*)",
       "mcp__tavily__tavily-search",
-      "Bash(true)"
+      "Bash(true)",
+      "Bash(NEO4J_SKIP_DETECTION=1 poetry run pytest tests/integration/test_neo4j_service.py::TestNeo4jService::test_health_check -v -s --tb=short)"
     ],
     "deny": []
   },

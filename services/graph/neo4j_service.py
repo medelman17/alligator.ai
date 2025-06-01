@@ -83,7 +83,7 @@ class Neo4jService:
             await self.driver.close()
             self.connected = False
         if hasattr(self, 'schema_manager'):
-            self.schema_manager.close()
+            await self.schema_manager.close()
     
     # === ENHANCED LEGAL RESEARCH METHODS ===
     
@@ -156,7 +156,9 @@ class Neo4jService:
             record = await result.single()
             
             if record:
-                return record["treatment_analysis"]
+                # Convert any Neo4j temporal objects to Python datetime objects
+                treatment_analysis = self._convert_neo4j_temporals(record["treatment_analysis"])
+                return treatment_analysis
             else:
                 return {
                     "case": None,
@@ -190,14 +192,19 @@ class Neo4jService:
             )
             record = await result.single()
             
-            return record["verification_result"] if record else {
-                "case_id": case_id,
-                "current_status": "unknown",
-                "good_law_confidence": "unknown",
-                "overruled_by": [],
-                "negative_treatment_count": 0,
-                "positive_treatment_count": 0
-            }
+            if record:
+                # Convert any Neo4j temporal objects to Python datetime objects  
+                verification_result = self._convert_neo4j_temporals(record["verification_result"])
+                return verification_result
+            else:
+                return {
+                    "case_id": case_id,
+                    "current_status": "unknown",
+                    "good_law_confidence": "unknown",
+                    "overruled_by": [],
+                    "negative_treatment_count": 0,
+                    "positive_treatment_count": 0
+                }
     
     async def calculate_legal_authority_pagerank(self) -> Dict[str, Any]:
         """
@@ -256,6 +263,57 @@ class Neo4jService:
             return await self._basic_text_search(session, search_terms, jurisdictions, practice_areas, limit)
     
     # === ENHANCED HELPER METHODS ===
+    
+    def _convert_neo4j_temporals(self, data: Any) -> Any:
+        """
+        Recursively convert Neo4j temporal objects to Python datetime objects.
+        
+        This handles:
+        - neo4j.time.DateTime objects
+        - neo4j.time.Date objects  
+        - Nested dictionaries and lists
+        - ISO datetime strings
+        """
+        if isinstance(data, dict):
+            return {key: self._convert_neo4j_temporals(value) for key, value in data.items()}
+        elif isinstance(data, list):
+            return [self._convert_neo4j_temporals(item) for item in data]
+        elif data is not None:
+            field_type = str(type(data))
+            
+            if isinstance(data, str):
+                # Check if it's an ISO datetime string that we can convert
+                if len(data) >= 10 and 'T' in data or data.count('-') >= 2:
+                    try:
+                        return datetime.fromisoformat(data.replace('Z', '+00:00'))
+                    except ValueError:
+                        return data
+                else:
+                    return data
+            elif 'neo4j.time.Date' in field_type:
+                # Neo4j Date object
+                neo4j_date = data.to_native()
+                return datetime.combine(neo4j_date, datetime.min.time())
+            elif 'neo4j.time.DateTime' in field_type:
+                # Neo4j DateTime object
+                return data.to_native()
+            elif 'neo4j.time.Duration' in field_type:
+                # Neo4j Duration object - convert to total seconds
+                return data.total_seconds()
+            elif hasattr(data, 'to_native'):
+                # Generic Neo4j temporal object
+                converted = data.to_native()
+                if hasattr(converted, 'date') and not hasattr(converted, 'hour'):
+                    # If it's still a date object, convert to datetime
+                    return datetime.combine(converted, datetime.min.time())
+                return converted
+            elif hasattr(data, 'year') and not hasattr(data, 'hour'):
+                # Python date object - convert to datetime
+                return datetime.combine(data, datetime.min.time())
+            else:
+                return data
+        else:
+            return data
     
     async def _basic_precedent_search(self, case_id: str, jurisdictions: List[str], practice_areas: List[str], limit: int):
         """Fallback precedent search for basic schema."""
@@ -440,6 +498,9 @@ class Neo4jService:
             for record in records[:limit]:
                 citing_case = self._record_to_case(record["citing"])
                 citation_rel = self._record_to_citation(record["r"])
+                # Set the proper case IDs for the citation
+                citation_rel.citing_case_id = citing_case.id
+                citation_rel.cited_case_id = case_id
                 results.append((citing_case, citation_rel))
             
             return results
@@ -457,6 +518,9 @@ class Neo4jService:
             for record in records[:limit]:
                 cited_case = self._record_to_case(record["cited"])
                 citation_rel = self._record_to_citation(record["r"])
+                # Set the proper case IDs for the citation
+                citation_rel.citing_case_id = case_id
+                citation_rel.cited_case_id = cited_case.id
                 results.append((cited_case, citation_rel))
             
             return results
@@ -657,19 +721,108 @@ class Neo4jService:
     # Utility methods
     def _record_to_case(self, record_data) -> Case:
         """Convert Neo4j record to Case object."""
-        data = dict(record_data)
+        # Handle both Neo4j Node objects and dictionaries
+        if hasattr(record_data, '_properties'):
+            # Neo4j Node object
+            data = dict(record_data._properties)
+        else:
+            # Already a dictionary
+            data = dict(record_data)
         
-        # Convert ISO strings back to datetime objects
+        # Convert date objects to datetime objects
         for field in ['decision_date', 'filing_date', 'created_at', 'updated_at']:
             if field in data and data[field]:
+                field_type = str(type(data[field]))
+                
                 if isinstance(data[field], str):
                     data[field] = datetime.fromisoformat(data[field].replace('Z', '+00:00'))
+                elif 'neo4j.time.Date' in field_type:
+                    # Neo4j Date object
+                    neo4j_date = data[field].to_native()
+                    data[field] = datetime.combine(neo4j_date, datetime.min.time())
+                elif 'neo4j.time.DateTime' in field_type:
+                    # Neo4j DateTime object
+                    data[field] = data[field].to_native()
+                elif hasattr(data[field], 'to_native'):
+                    # Generic Neo4j temporal object
+                    data[field] = data[field].to_native()
+                    if hasattr(data[field], 'date'):
+                        # If it's still a date object, convert to datetime
+                        data[field] = datetime.combine(data[field], datetime.min.time())
+                elif hasattr(data[field], 'year'):
+                    # Python date object
+                    if hasattr(data[field], 'hour'):
+                        # Already a datetime
+                        pass
+                    else:
+                        # Convert date to datetime
+                        data[field] = datetime.combine(data[field], datetime.min.time())
         
-        return Case(**data)
+        # Ensure required fields have default values
+        if 'full_name' not in data or not data['full_name']:
+            data['full_name'] = data.get('case_name', 'Unknown Case')
+        
+        if 'court_id' not in data or not data['court_id']:
+            data['court_id'] = 'unknown-court'
+        
+        # Handle fields that don't match the Case model exactly
+        # Convert practice_areas to the format expected by the model
+        if 'practice_areas' in data and data['practice_areas']:
+            # Neo4j may return practice areas as strings, convert to list if needed
+            if isinstance(data['practice_areas'], str):
+                data['practice_areas'] = [data['practice_areas']]
+        
+        # Convert fields not in the base Case model to metadata
+        case_fields = {
+            'id', 'citation', 'case_name', 'full_name', 'court_id', 'jurisdiction',
+            'decision_date', 'filing_date', 'judges', 'status', 'practice_areas',
+            'summary', 'holding', 'procedural_posture', 'disposition', 'authority_score',
+            'citation_count', 'overruling_cases', 'metadata', 'created_at', 'updated_at'
+        }
+        
+        # Move extra fields to metadata
+        metadata = data.get('metadata', {})
+        extra_fields = {}
+        for key, value in list(data.items()):
+            if key not in case_fields:
+                extra_fields[key] = value
+                del data[key]
+        
+        if extra_fields:
+            metadata.update(extra_fields)
+            data['metadata'] = metadata
+        
+        # Map good_law_status to status if present
+        if 'good_law_status' in data:
+            status_mapping = {
+                'good_law': 'GOOD_LAW',
+                'bad_law': 'BAD_LAW', 
+                'overruled': 'OVERRULED',
+                'questioned': 'QUESTIONED',
+                'limited': 'LIMITED',
+                'superseded': 'SUPERSEDED'
+            }
+            good_law_status = data.pop('good_law_status')
+            if good_law_status in status_mapping:
+                data['status'] = status_mapping[good_law_status]
+        
+        try:
+            return Case(**data)
+        except Exception as e:
+            logger.error(f"Failed to create Case object: {e}")
+            logger.error(f"Data keys: {list(data.keys())}")
+            logger.error(f"Full data: {data}")
+            raise
     
     def _record_to_citation(self, record_data) -> Citation:
         """Convert Neo4j record to Citation object."""
-        data = dict(record_data)
+        # Handle both Neo4j Relationship objects and dictionaries
+        if hasattr(record_data, '_properties'):
+            # Neo4j Relationship object
+            data = dict(record_data._properties)
+        else:
+            # Already a dictionary
+            data = dict(record_data)
         
         # Convert ISO strings back to datetime objects
         for field in ['created_at', 'updated_at']:
@@ -677,7 +830,69 @@ class Neo4jService:
                 if isinstance(data[field], str):
                     data[field] = datetime.fromisoformat(data[field].replace('Z', '+00:00'))
         
-        return Citation(**data)
+        # Map enhanced citation fields to basic Citation model
+        citation_fields = {
+            'id', 'citing_case_id', 'cited_case_id', 'treatment', 'context',
+            'page_references', 'quotations', 'strength', 'depth', 'created_at', 'updated_at'
+        }
+        
+        # Create a basic citation object with core fields
+        citation_data = {}
+        
+        # Generate ID if not present
+        if 'id' not in data:
+            citation_data['id'] = f"citation-{hash(str(data))}"
+        else:
+            citation_data['id'] = data['id']
+        
+        # Map treatment
+        if 'treatment' in data:
+            citation_data['treatment'] = data['treatment']
+        else:
+            citation_data['treatment'] = 'cites'
+        
+        # Map strength
+        if 'strength' in data:
+            citation_data['strength'] = float(data['strength'])
+        else:
+            citation_data['strength'] = 1.0
+        
+        # Map other fields if they exist
+        if 'context' in data:
+            citation_data['context'] = data['context']
+        if 'legal_context' in data:
+            citation_data['context'] = data['legal_context']
+        
+        if 'page_references' in data:
+            page_refs = data['page_references']
+            if isinstance(page_refs, list):
+                citation_data['page_references'] = page_refs
+            else:
+                citation_data['page_references'] = [str(page_refs)]
+        
+        if 'created_at' in data:
+            citation_data['created_at'] = data['created_at']
+        
+        if 'updated_at' in data:
+            citation_data['updated_at'] = data['updated_at']
+        
+        # These will need to be set by the calling method
+        citation_data['citing_case_id'] = 'unknown'
+        citation_data['cited_case_id'] = 'unknown'
+        
+        try:
+            return Citation(**citation_data)
+        except Exception as e:
+            logger.error(f"Failed to create Citation object: {e}")
+            logger.error(f"Citation data: {citation_data}")
+            # Return a minimal citation object
+            return Citation(
+                id=citation_data.get('id', 'unknown'),
+                citing_case_id='unknown',
+                cited_case_id='unknown',
+                treatment=citation_data.get('treatment', 'cites'),
+                strength=citation_data.get('strength', 1.0)
+            )
     
     async def health_check(self) -> bool:
         """Check if the database connection is healthy."""
