@@ -52,11 +52,12 @@ Query: *"police qualified immunity excessive force civil rights"*
 - Subscription tier-based rate limiting
 - Comprehensive audit logging and security monitoring
 
-### 🔌 MCP Integration
-- Use alligator.ai directly in Claude Desktop
-- VS Code extension support
-- Secure API access with JWT authentication
-- Rate-limited access controls
+### 🔌 **MCP Integration** ✅ OPERATIONAL
+- **Claude Desktop Integration**: Full MCP server implementation with 8 legal research tools
+- **Multi-Jurisdiction Support**: Search all U.S. federal and state courts via CourtListener API
+- **Real-Time Legal Research**: Live case discovery, semantic search, and citation analysis
+- **Professional Memo Generation**: AI-powered legal memoranda with proper citations
+- **Comprehensive Testing**: All 5 integration test suites passing
 
 ## Architecture
 
@@ -201,24 +202,52 @@ citation_graph/
 └── docker/              # Docker configurations
 ```
 
-### Using the MCP Server
+### Using the MCP Server ✅ READY FOR PRODUCTION
 
-1. Build the MCP Docker image:
+**Test the MCP Server:**
 ```bash
-docker build -t alligator-ai-mcp:latest -f mcp_server/Dockerfile .
+# Run comprehensive integration tests
+poetry run python test_mcp_server.py
+
+# Expected output: 5/5 tests passed
+# ✅ MCP Server Setup & Configuration  
+# ✅ CourtListener Tools (Multi-Jurisdiction)
+# ✅ Research Workflow Tools  
+# ✅ Legal Analysis Tools
+# ✅ Full Research Workflow
 ```
 
-2. Configure Claude Desktop:
+**Available MCP Tools:**
+1. `search_legal_cases` - Search all U.S. jurisdictions (federal, state courts)
+2. `get_case_details` - Detailed case information with full text and citations
+3. `citation_network_expansion` - Discover related cases through citation analysis
+4. `conduct_legal_research` - Comprehensive AI research workflows
+5. `semantic_case_search` - Find similar cases using AI embeddings
+6. `analyze_case_authority` - Legal authority and precedent analysis
+7. `generate_legal_memo` - Professional legal memoranda generation
+8. `identify_opposing_arguments` - Opposition research and counterarguments
+
+**Configure Claude Desktop:**
 ```json
 {
   "mcpServers": {
     "alligator-ai": {
-      "command": "docker",
-      "args": ["run", "--rm", "-i", "--env-file", ".env", "alligator-ai-mcp:latest"]
+      "command": "python",
+      "args": ["-m", "mcp_server.server"],
+      "cwd": "/path/to/citation_graph",
+      "env": {
+        "PYTHONPATH": "/path/to/citation_graph"
+      }
     }
   }
 }
 ```
+
+**Example Usage in Claude Desktop:**
+- "Search for recent Supreme Court cases on equal protection"
+- "Analyze the authority of Miranda v. Arizona in criminal law"
+- "Conduct research on constitutional limits of police deadly force"
+- "Generate a legal memo from my research session"
 
 ## Enhanced Legal Research Features
 
