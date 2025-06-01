@@ -62,8 +62,57 @@ class EnhancedNeo4jService:
         """Close the database connection."""
         if self.driver:
             await self.driver.close()
-            self.connected = False
-            self.schema_manager.close()
+    
+    def _convert_neo4j_temporals(self, data: Any) -> Any:
+        """
+        Recursively convert Neo4j temporal objects to Python datetime objects.
+        
+        This handles:
+        - neo4j.time.DateTime objects
+        - neo4j.time.Date objects  
+        - Nested dictionaries and lists
+        - ISO datetime strings
+        """
+        if isinstance(data, dict):
+            return {key: self._convert_neo4j_temporals(value) for key, value in data.items()}
+        elif isinstance(data, list):
+            return [self._convert_neo4j_temporals(item) for item in data]
+        elif data is not None:
+            field_type = str(type(data))
+            
+            if isinstance(data, str):
+                # Check if it's an ISO datetime string that we can convert
+                if len(data) >= 10 and 'T' in data or data.count('-') >= 2:
+                    try:
+                        return datetime.fromisoformat(data.replace('Z', '+00:00'))
+                    except ValueError:
+                        return data
+                else:
+                    return data
+            elif 'neo4j.time.Date' in field_type:
+                # Neo4j Date object
+                neo4j_date = data.to_native()
+                return datetime.combine(neo4j_date, datetime.min.time())
+            elif 'neo4j.time.DateTime' in field_type:
+                # Neo4j DateTime object
+                return data.to_native()
+            elif 'neo4j.time.Duration' in field_type:
+                # Neo4j Duration object - convert to total seconds
+                return data.total_seconds()
+            elif hasattr(data, 'to_native'):
+                # Generic Neo4j temporal object
+                converted = data.to_native()
+                if hasattr(converted, 'date') and not hasattr(converted, 'hour'):
+                    # If it's still a date object, convert to datetime
+                    return datetime.combine(converted, datetime.min.time())
+                return converted
+            elif hasattr(data, 'year') and not hasattr(data, 'hour'):
+                # Python date object - convert to datetime
+                return datetime.combine(data, datetime.min.time())
+            else:
+                return data
+        else:
+            return data
     
     # === ENHANCED LEGAL RESEARCH METHODS ===
     
@@ -128,7 +177,7 @@ class EnhancedNeo4jService:
             record = await result.single()
             
             if record:
-                return record["treatment_analysis"]
+                return self._convert_neo4j_temporals(record["treatment_analysis"])
             else:
                 return {
                     "case": None,
@@ -158,7 +207,7 @@ class EnhancedNeo4jService:
             )
             record = await result.single()
             
-            return record["verification_result"] if record else {
+            return self._convert_neo4j_temporals(record["verification_result"]) if record else {
                 "case_id": case_id,
                 "current_status": "unknown",
                 "good_law_confidence": "unknown",
